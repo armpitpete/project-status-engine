@@ -36,6 +36,8 @@ STATUS_LABELS = {
     "move-to-new-chat",
 }
 
+STATUS_ORDER = ["blocked", "review", "active", "clear"]
+
 
 def now_utc() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
@@ -80,8 +82,8 @@ def label_names(item: dict[str, Any]) -> list[str]:
     return sorted(str(label.get("name", "")) for label in labels if label.get("name"))
 
 
-def has_label(item: dict[str, Any], name: str) -> bool:
-    return name in label_names(item)
+def has_status_label(item: dict[str, Any], name: str) -> bool:
+    return name in item.get("status_labels", [])
 
 
 def extract_issue(item: dict[str, Any]) -> dict[str, Any]:
@@ -119,6 +121,16 @@ def extract_commit(item: dict[str, Any]) -> dict[str, Any]:
         "url": item.get("html_url") or "",
         "date": author.get("date"),
     }
+
+
+def project_status(issues: list[dict[str, Any]], pulls: list[dict[str, Any]]) -> str:
+    if any(has_status_label(issue, "blocked") for issue in issues):
+        return "blocked"
+    if pulls or any(has_status_label(issue, "review") for issue in issues):
+        return "review"
+    if issues:
+        return "active"
+    return "clear"
 
 
 def collect() -> dict[str, Any]:
@@ -166,13 +178,7 @@ def collect() -> dict[str, Any]:
         pulls = [extract_pr(item) for item in (pulls_raw or [])]
         commits = [extract_commit(item) for item in (commits_raw or [])]
 
-        status = "clear"
-        if any(any(label == "blocked" for label in issue["status_labels"]) for issue in issues):
-            status = "blocked"
-        elif pulls:
-            status = "review"
-        elif issues:
-            status = "active"
+        status = project_status(issues, pulls)
 
         projects.append(
             {
@@ -188,13 +194,114 @@ def collect() -> dict[str, Any]:
             }
         )
 
-    return {
+    data = {
         "owner": OWNER,
         "generated_at": generated_at,
         "project_count": len(projects),
         "projects": projects,
         "errors": errors,
     }
+    data["summary"] = build_summary(projects)
+    data["priority"] = build_priority(projects)
+    return data
+
+
+def build_summary(projects: list[dict[str, Any]]) -> dict[str, Any]:
+    status_counts = {status: 0 for status in STATUS_ORDER}
+    label_counts = {label: 0 for label in sorted(STATUS_LABELS)}
+    total_issues = 0
+    total_prs = 0
+
+    for project in projects:
+        status_counts[project["status"]] = status_counts.get(project["status"], 0) + 1
+        total_prs += len(project["open_prs"])
+        total_issues += len(project["open_issues"])
+        for issue in project["open_issues"]:
+            for label in issue["status_labels"]:
+                label_counts[label] = label_counts.get(label, 0) + 1
+        for pr in project["open_prs"]:
+            for label in pr["status_labels"]:
+                label_counts[label] = label_counts.get(label, 0) + 1
+
+    attention_count = status_counts.get("blocked", 0) + status_counts.get("review", 0)
+    return {
+        "status_counts": status_counts,
+        "label_counts": label_counts,
+        "total_issues": total_issues,
+        "total_prs": total_prs,
+        "attention_count": attention_count,
+    }
+
+
+def priority_rank(project: dict[str, Any], item: dict[str, Any] | None, kind: str) -> tuple[int, str]:
+    if project["status"] == "blocked":
+        return (0, project.get("updated_at") or "")
+    if kind == "pr" or project["status"] == "review":
+        return (1, project.get("updated_at") or "")
+    if item and has_status_label(item, "next"):
+        return (2, item.get("updated_at") or "")
+    if item and has_status_label(item, "home-pc"):
+        return (3, item.get("updated_at") or "")
+    if project["status"] == "active":
+        return (4, project.get("updated_at") or "")
+    return (5, project.get("updated_at") or "")
+
+
+def build_priority(projects: list[dict[str, Any]], limit: int = 8) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+
+    for project in projects:
+        if project["open_prs"]:
+            pr = project["open_prs"][0]
+            candidates.append(
+                {
+                    "project": project["full_name"],
+                    "project_url": project["url"],
+                    "kind": "pr",
+                    "title": pr["title"],
+                    "number": pr["number"],
+                    "url": pr["url"],
+                    "reason": "Open PR needs review or merge decision.",
+                    "rank": priority_rank(project, pr, "pr"),
+                }
+            )
+
+        selected_issue = None
+        reason = None
+        for label, label_reason in (
+            ("blocked", "Blocked item needs clearing."),
+            ("review", "Issue is marked for review."),
+            ("next", "Issue is marked as next."),
+            ("home-pc", "Issue needs the home machine."),
+        ):
+            selected_issue = next(
+                (issue for issue in project["open_issues"] if has_status_label(issue, label)),
+                None,
+            )
+            if selected_issue:
+                reason = label_reason
+                break
+
+        if not selected_issue and project["open_issues"]:
+            selected_issue = project["open_issues"][0]
+            reason = "Recent open issue."
+
+        if selected_issue:
+            candidates.append(
+                {
+                    "project": project["full_name"],
+                    "project_url": project["url"],
+                    "kind": "issue",
+                    "title": selected_issue["title"],
+                    "number": selected_issue["number"],
+                    "url": selected_issue["url"],
+                    "reason": reason or "Open issue.",
+                    "rank": priority_rank(project, selected_issue, "issue"),
+                }
+            )
+
+    candidates.sort(key=lambda item: (item["rank"][0], item["rank"][1]), reverse=False)
+    return candidates[:limit]
 
 
 def esc(value: Any) -> str:
@@ -205,6 +312,83 @@ def issue_link(item: dict[str, Any]) -> str:
     labels = item.get("status_labels") or item.get("labels") or []
     label_text = "" if not labels else " " + " ".join(f"<span class='label'>{esc(label)}</span>" for label in labels)
     return f"<li><a href='{esc(item['url'])}'>#{esc(item['number'])} — {esc(item['title'])}</a>{label_text}</li>"
+
+
+def render_count_bar(label: str, value: int, total: int) -> str:
+    width = 0 if total <= 0 else max(4, int((value / total) * 100))
+    return f"""
+<div class="bar-row">
+  <div class="bar-label">{esc(label)}</div>
+  <div class="bar-track"><div class="bar-fill" style="width: {width}%"></div></div>
+  <div class="bar-value">{esc(value)}</div>
+</div>
+"""
+
+
+def render_summary_graphics(data: dict[str, Any]) -> str:
+    summary = data.get("summary") or {}
+    status_counts = summary.get("status_counts") or {}
+    total_projects = max(1, data.get("project_count", 0))
+    bars = "\n".join(
+        render_count_bar(status, int(status_counts.get(status, 0)), total_projects)
+        for status in STATUS_ORDER
+    )
+
+    labels = summary.get("label_counts") or {}
+    useful_labels = ["next", "home-pc", "blocked", "waiting-user", "review", "move-to-new-chat"]
+    label_pills = "\n".join(
+        f"<span class='metric-pill'><strong>{esc(labels.get(label, 0))}</strong>{esc(label)}</span>"
+        for label in useful_labels
+    )
+
+    return f"""
+<section class="visual-grid">
+  <div class="panel visual-panel">
+    <h2>Project shape</h2>
+    <p class="muted">Automatic count by current status.</p>
+    {bars}
+  </div>
+  <div class="panel visual-panel">
+    <h2>Attention map</h2>
+    <div class="big-number">{esc(summary.get('attention_count', 0))}</div>
+    <p>Projects need review or are blocked.</p>
+    <div class="mini-metrics">
+      <span><strong>{esc(summary.get('total_issues', 0))}</strong> open issues</span>
+      <span><strong>{esc(summary.get('total_prs', 0))}</strong> open PRs</span>
+    </div>
+  </div>
+  <div class="panel visual-panel">
+    <h2>Status labels</h2>
+    <p class="muted">Counts from recognised labels.</p>
+    <div class="metric-pills">{label_pills}</div>
+  </div>
+</section>
+"""
+
+
+def render_priority(data: dict[str, Any]) -> str:
+    items = data.get("priority") or []
+    if not items:
+        return "<ol><li>No priority items found.</li></ol>"
+
+    rows = []
+    for item in items:
+        marker = "PR" if item["kind"] == "pr" else "Issue"
+        rows.append(
+            f"""
+<li class="priority-item">
+  <div class="priority-main">
+    <span class="priority-kind">{esc(marker)}</span>
+    <a href="{esc(item['url'])}">#{esc(item['number'])} — {esc(item['title'])}</a>
+  </div>
+  <div class="priority-meta">
+    <a href="{esc(item['project_url'])}">{esc(item['project'])}</a>
+    <span>{esc(item['reason'])}</span>
+  </div>
+</li>
+"""
+        )
+    return "<ol class='priority-list'>" + "\n".join(rows) + "</ol>"
 
 
 def render_html(data: dict[str, Any]) -> str:
@@ -262,7 +446,7 @@ def render_html(data: dict[str, Any]) -> str:
     header {{ padding: 2rem; background: #20262c; color: white; }}
     main {{ max-width: 1100px; margin: 0 auto; padding: 1.5rem; }}
     a {{ color: #185abc; }}
-    .summary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem; }}
+    .summary, .visual-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem; }}
     .panel, .card {{ background: white; border: 1px solid #d9dde3; border-radius: 14px; padding: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }}
     .cards {{ display: grid; gap: 1rem; }}
     .card-top {{ display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }}
@@ -272,10 +456,24 @@ def render_html(data: dict[str, Any]) -> str:
     ul {{ padding-left: 1.25rem; }}
     li {{ margin: 0.25rem 0; }}
     .muted {{ color: #5e6673; font-size: 0.92rem; }}
-    .status, .label {{ display: inline-block; border-radius: 999px; padding: 0.15rem 0.5rem; background: #edf0f4; font-size: 0.78rem; }}
+    .status, .label, .priority-kind, .metric-pill {{ display: inline-block; border-radius: 999px; padding: 0.15rem 0.5rem; background: #edf0f4; font-size: 0.78rem; }}
     .status-blocked .status {{ background: #ffe2e2; }}
     .status-review .status {{ background: #fff0c2; }}
     .status-active .status {{ background: #e3f2ff; }}
+    .priority-list {{ list-style: none; padding: 0; display: grid; gap: 0.65rem; }}
+    .priority-item {{ margin: 0; padding: 0.75rem; border: 1px solid #e3e7ed; border-radius: 12px; background: #fbfcfe; }}
+    .priority-main {{ display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }}
+    .priority-meta {{ color: #5e6673; font-size: 0.9rem; display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.3rem; }}
+    .priority-kind {{ background: #20262c; color: white; }}
+    .visual-panel {{ min-height: 160px; }}
+    .bar-row {{ display: grid; grid-template-columns: 4.5rem 1fr 2rem; gap: 0.5rem; align-items: center; margin: 0.55rem 0; }}
+    .bar-label, .bar-value {{ font-size: 0.85rem; color: #5e6673; }}
+    .bar-track {{ height: 0.7rem; border-radius: 999px; background: #edf0f4; overflow: hidden; }}
+    .bar-fill {{ height: 100%; border-radius: 999px; background: #20262c; }}
+    .big-number {{ font-size: 3rem; line-height: 1; font-weight: 750; color: #20262c; }}
+    .mini-metrics, .metric-pills {{ display: flex; flex-wrap: wrap; gap: 0.5rem; }}
+    .mini-metrics span {{ border: 1px solid #e3e7ed; border-radius: 10px; padding: 0.45rem 0.6rem; background: #fbfcfe; }}
+    .metric-pill {{ display: inline-flex; gap: 0.35rem; align-items: center; }}
     footer {{ color: #5e6673; padding: 1rem 2rem 2rem; text-align: center; }}
   </style>
 </head>
@@ -290,6 +488,14 @@ def render_html(data: dict[str, Any]) -> str:
       <div class="panel"><strong>Generated</strong><br>{esc(data['generated_at'])}</div>
       <div class="panel"><strong>Projects scanned</strong><br>{esc(data['project_count'])}</div>
     </section>
+
+    <section class="panel">
+      <h2>Do Next</h2>
+      <p class="muted">Automatic priority list from PRs, issues, labels, and recency.</p>
+      {render_priority(data)}
+    </section>
+
+    {render_summary_graphics(data)}
 
     <section class="panel">
       <h2>Home-machine tasks</h2>
@@ -320,17 +526,27 @@ def render_project_markdown(data: dict[str, Any]) -> str:
         f"Owner: `{data['owner']}`",
         f"Generated: `{data['generated_at']}`",
         "",
+        "## Do Next",
+        "",
     ]
+
+    if data.get("priority"):
+        for item in data["priority"]:
+            lines.append(f"- {item['project']} #{item['number']} — {item['title']}: {item['url']}")
+    else:
+        lines.append("- No priority items found.")
+
+    lines.extend(["", "## Projects", ""])
     for project in data["projects"]:
         lines.extend(
             [
-                f"## {project['full_name']}",
+                f"### {project['full_name']}",
                 "",
                 f"Status: `{project['status']}`",
                 f"Updated: `{iso_to_display(project.get('updated_at'))}`",
                 f"Repo: {project['url']}",
                 "",
-                "### Open issues",
+                "#### Open issues",
             ]
         )
         if project["open_issues"]:
@@ -339,7 +555,7 @@ def render_project_markdown(data: dict[str, Any]) -> str:
                 lines.append(f"- #{issue['number']} — {issue['title']}{label_text}: {issue['url']}")
         else:
             lines.append("- None found.")
-        lines.extend(["", "### Open PRs"])
+        lines.extend(["", "#### Open PRs"])
         if project["open_prs"]:
             for pr in project["open_prs"]:
                 label_text = "" if not pr["status_labels"] else f" [{' '.join(pr['status_labels'])}]"
