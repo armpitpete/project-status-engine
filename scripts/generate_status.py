@@ -133,6 +133,20 @@ def project_status(issues: list[dict[str, Any]], pulls: list[dict[str, Any]]) ->
     return "clear"
 
 
+def project_filter_tags(project: dict[str, Any]) -> list[str]:
+    tags = {"all", project["status"]}
+    for issue in project["open_issues"]:
+        for label in issue.get("status_labels", []):
+            if label in {"next", "home-pc", "blocked", "review"}:
+                tags.add(label)
+    for pr in project["open_prs"]:
+        tags.add("review")
+        for label in pr.get("status_labels", []):
+            if label in {"next", "home-pc", "blocked", "review"}:
+                tags.add(label)
+    return sorted(tags)
+
+
 def collect() -> dict[str, Any]:
     generated_at = now_utc()
     errors: list[str] = []
@@ -179,20 +193,19 @@ def collect() -> dict[str, Any]:
         commits = [extract_commit(item) for item in (commits_raw or [])]
 
         status = project_status(issues, pulls)
-
-        projects.append(
-            {
-                "name": repo.get("name"),
-                "full_name": full_name,
-                "description": repo.get("description") or "",
-                "url": repo.get("html_url") or "",
-                "updated_at": repo.get("updated_at"),
-                "status": status,
-                "open_issues": issues,
-                "open_prs": pulls,
-                "latest_commit": commits[0] if commits else None,
-            }
-        )
+        project = {
+            "name": repo.get("name"),
+            "full_name": full_name,
+            "description": repo.get("description") or "",
+            "url": repo.get("html_url") or "",
+            "updated_at": repo.get("updated_at"),
+            "status": status,
+            "open_issues": issues,
+            "open_prs": pulls,
+            "latest_commit": commits[0] if commits else None,
+        }
+        project["filter_tags"] = project_filter_tags(project)
+        projects.append(project)
 
     data = {
         "owner": OWNER,
@@ -202,7 +215,7 @@ def collect() -> dict[str, Any]:
         "errors": errors,
     }
     data["summary"] = build_summary(projects)
-    data["priority"] = build_priority(projects)
+    data["priority"] = build_priority(projects, limit=5)
     return data
 
 
@@ -247,7 +260,7 @@ def priority_rank(project: dict[str, Any], item: dict[str, Any] | None, kind: st
     return (5, project.get("updated_at") or "")
 
 
-def build_priority(projects: list[dict[str, Any]], limit: int = 8) -> list[dict[str, Any]]:
+def build_priority(projects: list[dict[str, Any]], limit: int = 5) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
 
     for project in projects:
@@ -348,7 +361,7 @@ def render_summary_graphics(data: dict[str, Any]) -> str:
     <p class="muted">Automatic count by current status.</p>
     {bars}
   </div>
-  <div class="panel visual-panel">
+  <div class="panel visual-panel attention-panel">
     <h2>Attention map</h2>
     <div class="big-number">{esc(summary.get('attention_count', 0))}</div>
     <p>Projects need review or are blocked.</p>
@@ -391,42 +404,112 @@ def render_priority(data: dict[str, Any]) -> str:
     return "<ol class='priority-list'>" + "\n".join(rows) + "</ol>"
 
 
-def render_html(data: dict[str, Any]) -> str:
-    project_cards = []
-    home_items = []
+def render_filter_links(data: dict[str, Any]) -> str:
+    summary = data.get("summary") or {}
+    labels = summary.get("label_counts") or {}
+    status_counts = summary.get("status_counts") or {}
+    filters = [
+        ("projects", "All", data.get("project_count", 0)),
+        ("filter-review", "Review", status_counts.get("review", 0) + labels.get("review", 0)),
+        ("filter-blocked", "Blocked", status_counts.get("blocked", 0) + labels.get("blocked", 0)),
+        ("filter-home-pc", "Home PC", labels.get("home-pc", 0)),
+        ("filter-next", "Next", labels.get("next", 0)),
+        ("filter-clear", "Clear", status_counts.get("clear", 0)),
+    ]
+    return "\n".join(
+        f"<a class='filter-chip' href='#{esc(anchor)}'>{esc(label)} <strong>{esc(count)}</strong></a>"
+        for anchor, label, count in filters
+    )
 
-    for project in data["projects"]:
-        issues = project["open_issues"]
-        prs = project["open_prs"]
-        home = [issue for issue in issues if "home-pc" in issue.get("status_labels", [])]
-        for issue in home:
-            home_items.append((project, issue))
 
-        issues_html = "\n".join(issue_link(issue) for issue in issues[:MAX_ITEMS]) or "<li>No open issues found.</li>"
-        prs_html = "\n".join(issue_link(pr) for pr in prs[:MAX_ITEMS]) or "<li>No open PRs found.</li>"
-        commit = project.get("latest_commit")
-        commit_html = "No commit found."
-        if commit:
-            commit_html = f"<a href='{esc(commit['url'])}'>{esc(commit['sha'])}</a> — {esc(commit['message'])}"
+def render_project_summary(project: dict[str, Any]) -> str:
+    latest = project.get("latest_commit")
+    latest_text = "No commit found."
+    if latest:
+        latest_text = f"{esc(latest['sha'])} — {esc(latest['message'])}"
+    return f"""
+<div class="project-summary">
+  <span>{esc(len(project['open_issues']))} issues</span>
+  <span>{esc(len(project['open_prs']))} PRs</span>
+  <span>{latest_text}</span>
+</div>
+"""
 
-        project_cards.append(
-            f"""
-<section class="card status-{esc(project['status'])}">
-  <div class="card-top">
-    <h2><a href="{esc(project['url'])}">{esc(project['full_name'])}</a></h2>
+
+def render_project_card(project: dict[str, Any], open_by_default: bool = False) -> str:
+    issues = project["open_issues"]
+    prs = project["open_prs"]
+    issues_html = "\n".join(issue_link(issue) for issue in issues[:MAX_ITEMS]) or "<li>No open issues found.</li>"
+    prs_html = "\n".join(issue_link(pr) for pr in prs[:MAX_ITEMS]) or "<li>No open PRs found.</li>"
+    commit = project.get("latest_commit")
+    commit_html = "No commit found."
+    if commit:
+        commit_html = f"<a href='{esc(commit['url'])}'>{esc(commit['sha'])}</a> — {esc(commit['message'])}"
+
+    open_attr = " open" if open_by_default else ""
+    tags = " ".join(f"tag-{tag}" for tag in project.get("filter_tags", []))
+    return f"""
+<details class="card compact-card status-{esc(project['status'])} {esc(tags)}"{open_attr}>
+  <summary>
+    <span class="project-title"><a href="{esc(project['url'])}">{esc(project['full_name'])}</a></span>
     <span class="status">{esc(project['status'])}</span>
+    {render_project_summary(project)}
+  </summary>
+  <div class="project-detail">
+    <p>{esc(project.get('description') or 'No repository description.')}</p>
+    <p class="muted">Updated: {esc(iso_to_display(project.get('updated_at')))}</p>
+    <h3>Open issues</h3>
+    <ul>{issues_html}</ul>
+    <h3>Open PRs</h3>
+    <ul>{prs_html}</ul>
+    <h3>Latest commit</h3>
+    <p>{commit_html}</p>
   </div>
-  <p>{esc(project.get('description') or 'No repository description.')}</p>
-  <p class="muted">Updated: {esc(iso_to_display(project.get('updated_at')))}</p>
-  <h3>Open issues</h3>
-  <ul>{issues_html}</ul>
-  <h3>Open PRs</h3>
-  <ul>{prs_html}</ul>
-  <h3>Latest commit</h3>
-  <p>{commit_html}</p>
+</details>
+"""
+
+
+def render_project_section(title: str, anchor: str, projects: list[dict[str, Any]]) -> str:
+    if not projects:
+        return f"""
+<section id="{esc(anchor)}" class="project-group panel">
+  <h2>{esc(title)}</h2>
+  <p class="muted">No matching projects.</p>
 </section>
 """
-        )
+    cards = "\n".join(render_project_card(project) for project in projects)
+    return f"""
+<section id="{esc(anchor)}" class="project-group">
+  <h2>{esc(title)} <span class="group-count">{esc(len(projects))}</span></h2>
+  <div class="cards compact-cards">
+    {cards}
+  </div>
+</section>
+"""
+
+
+def projects_with_tag(data: dict[str, Any], tag: str) -> list[dict[str, Any]]:
+    return [project for project in data["projects"] if tag in project.get("filter_tags", [])]
+
+
+def render_project_groups(data: dict[str, Any]) -> str:
+    groups = [
+        ("All projects", "projects", data["projects"]),
+        ("Needs review", "filter-review", projects_with_tag(data, "review")),
+        ("Blocked", "filter-blocked", projects_with_tag(data, "blocked")),
+        ("Home PC", "filter-home-pc", projects_with_tag(data, "home-pc")),
+        ("Next", "filter-next", projects_with_tag(data, "next")),
+        ("Clear", "filter-clear", [project for project in data["projects"] if project["status"] == "clear"]),
+    ]
+    return "\n".join(render_project_section(title, anchor, projects) for title, anchor, projects in groups)
+
+
+def render_html(data: dict[str, Any]) -> str:
+    home_items = []
+    for project in data["projects"]:
+        home = [issue for issue in project["open_issues"] if "home-pc" in issue.get("status_labels", [])]
+        for issue in home:
+            home_items.append((project, issue))
 
     home_html = "\n".join(
         f"<li><strong>{esc(project['name'])}</strong>: <a href='{esc(issue['url'])}'>#{esc(issue['number'])} — {esc(issue['title'])}</a></li>"
@@ -448,33 +531,53 @@ def render_html(data: dict[str, Any]) -> str:
     a {{ color: #185abc; }}
     .summary, .visual-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem; }}
     .panel, .card {{ background: white; border: 1px solid #d9dde3; border-radius: 14px; padding: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }}
-    .cards {{ display: grid; gap: 1rem; }}
-    .card-top {{ display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }}
+    .cards {{ display: grid; gap: 0.75rem; }}
     h1, h2, h3 {{ margin-top: 0; }}
     h2 {{ font-size: 1.05rem; }}
     h3 {{ font-size: 0.95rem; margin-bottom: 0.25rem; }}
     ul {{ padding-left: 1.25rem; }}
     li {{ margin: 0.25rem 0; }}
     .muted {{ color: #5e6673; font-size: 0.92rem; }}
-    .status, .label, .priority-kind, .metric-pill {{ display: inline-block; border-radius: 999px; padding: 0.15rem 0.5rem; background: #edf0f4; font-size: 0.78rem; }}
+    .status, .label, .priority-kind, .metric-pill, .group-count {{ display: inline-block; border-radius: 999px; padding: 0.15rem 0.5rem; background: #edf0f4; font-size: 0.78rem; }}
     .status-blocked .status {{ background: #ffe2e2; }}
     .status-review .status {{ background: #fff0c2; }}
     .status-active .status {{ background: #e3f2ff; }}
+    .control-strip {{ position: sticky; top: 0; z-index: 5; margin: -0.25rem 0 1rem; padding: 0.6rem; background: rgba(245,246,248,0.94); backdrop-filter: blur(8px); border: 1px solid #d9dde3; border-radius: 14px; }}
+    .filter-chips {{ display: flex; flex-wrap: wrap; gap: 0.5rem; }}
+    .filter-chip {{ text-decoration: none; border: 1px solid #d9dde3; border-radius: 999px; padding: 0.35rem 0.65rem; background: white; color: #20262c; }}
+    .filter-chip:hover, .filter-chip:focus {{ border-color: #20262c; }}
     .priority-list {{ list-style: none; padding: 0; display: grid; gap: 0.65rem; }}
     .priority-item {{ margin: 0; padding: 0.75rem; border: 1px solid #e3e7ed; border-radius: 12px; background: #fbfcfe; }}
     .priority-main {{ display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }}
     .priority-meta {{ color: #5e6673; font-size: 0.9rem; display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.3rem; }}
     .priority-kind {{ background: #20262c; color: white; }}
-    .visual-panel {{ min-height: 160px; }}
+    .visual-panel {{ min-height: 175px; }}
+    .attention-panel {{ display: flex; flex-direction: column; justify-content: space-between; }}
     .bar-row {{ display: grid; grid-template-columns: 4.5rem 1fr 2rem; gap: 0.5rem; align-items: center; margin: 0.55rem 0; }}
     .bar-label, .bar-value {{ font-size: 0.85rem; color: #5e6673; }}
     .bar-track {{ height: 0.7rem; border-radius: 999px; background: #edf0f4; overflow: hidden; }}
     .bar-fill {{ height: 100%; border-radius: 999px; background: #20262c; }}
-    .big-number {{ font-size: 3rem; line-height: 1; font-weight: 750; color: #20262c; }}
+    .big-number {{ font-size: 3.6rem; line-height: 1; font-weight: 750; color: #20262c; }}
     .mini-metrics, .metric-pills {{ display: flex; flex-wrap: wrap; gap: 0.5rem; }}
     .mini-metrics span {{ border: 1px solid #e3e7ed; border-radius: 10px; padding: 0.45rem 0.6rem; background: #fbfcfe; }}
     .metric-pill {{ display: inline-flex; gap: 0.35rem; align-items: center; }}
+    .project-group {{ scroll-margin-top: 4rem; margin-top: 1.25rem; }}
+    .compact-card {{ padding: 0; overflow: hidden; }}
+    .compact-card summary {{ cursor: pointer; list-style: none; padding: 0.85rem 1rem; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem; align-items: center; }}
+    .compact-card summary::-webkit-details-marker {{ display: none; }}
+    .compact-card summary::before {{ content: "＋"; color: #5e6673; margin-right: 0.4rem; }}
+    .compact-card[open] summary::before {{ content: "−"; }}
+    .project-title {{ font-weight: 700; overflow-wrap: anywhere; }}
+    .project-summary {{ grid-column: 1 / -1; display: flex; gap: 0.55rem; flex-wrap: wrap; color: #5e6673; font-size: 0.85rem; }}
+    .project-summary span {{ background: #f5f6f8; border-radius: 999px; padding: 0.18rem 0.5rem; }}
+    .project-detail {{ border-top: 1px solid #e3e7ed; padding: 1rem; }}
     footer {{ color: #5e6673; padding: 1rem 2rem 2rem; text-align: center; }}
+    @media (max-width: 620px) {{
+      header {{ padding: 1.25rem; }}
+      main {{ padding: 1rem; }}
+      .compact-card summary {{ grid-template-columns: 1fr; }}
+      .bar-row {{ grid-template-columns: 4rem 1fr 1.5rem; }}
+    }}
   </style>
 </head>
 <body>
@@ -488,6 +591,10 @@ def render_html(data: dict[str, Any]) -> str:
       <div class="panel"><strong>Generated</strong><br>{esc(data['generated_at'])}</div>
       <div class="panel"><strong>Projects scanned</strong><br>{esc(data['project_count'])}</div>
     </section>
+
+    <nav class="control-strip" aria-label="Project filters">
+      <div class="filter-chips">{render_filter_links(data)}</div>
+    </nav>
 
     <section class="panel">
       <h2>Do Next</h2>
@@ -507,9 +614,7 @@ def render_html(data: dict[str, Any]) -> str:
       <ul>{errors_html}</ul>
     </section>
 
-    <section class="cards">
-      {''.join(project_cards)}
-    </section>
+    {render_project_groups(data)}
   </main>
   <footer>Generated automatically. Source of truth: GitHub repositories, issues, PRs, labels, and commits.</footer>
 </body>
