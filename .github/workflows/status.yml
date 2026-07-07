@@ -3,7 +3,7 @@ name: Generate project status
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 7 * * *"
+    - cron: "*/15 * * * *"
   push:
     branches:
       - main
@@ -32,12 +32,18 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Run deterministic tests
+        run: python -m unittest discover -s tests -p "test_*.py"
+
       - name: Generate status site
         env:
+          PROJECT_STATUS_TOKEN: ${{ secrets.PROJECT_STATUS_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_OWNER: armpitpete
           STATUS_MAX_REPOS: "30"
           STATUS_MAX_ITEMS: "8"
+          STATUS_PROJECT_LIMIT: "5"
+          STATUS_ACTIVITY_WINDOW_DAYS: "30"
           STATUS_OUT_DIR: public
         run: python scripts/generate_status.py
 
