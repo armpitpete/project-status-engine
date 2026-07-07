@@ -16,20 +16,49 @@ The source of truth stays where the work already happens:
 
 Generated files are outputs. Do not maintain generated status by hand.
 
+## Two views, one engine
+
+The engine performs one automatic repository scan and one ranking pass, then derives two different views.
+
+### Public surface
+
+The public GitHub Pages site shows the full discovered repository pool, currently expected to be around 34 repositories.
+
+- public repositories may show public names, links, issues and PRs;
+- private repositories remain anonymous and redacted;
+- all public counts, filters, heat-map rows, Markdown and JSON reflect the full public-safe candidate pool;
+- the public site is a harmless portfolio/activity surface, not the owner control dashboard.
+
+### Private owner dashboard
+
+The private owner view contains only the five busiest repositories from the same ranking result.
+
+- real repository names are preserved for both public and private repositories;
+- issue, PR and commit context is preserved;
+- `Do Next` is derived only from those same five repositories and may include private work;
+- this output must be served only behind real authentication.
+
+The workflow currently generates the private view into `private-build/` on the ephemeral runner but does not upload it into the public Pages artifact. An authenticated deployment target is the next delivery layer.
+
 ## What it generates
 
-The GitHub Actions workflow runs `scripts/generate_status.py` and builds a static Pages site in `public/`.
+Public output in `public/`:
 
-Generated outputs:
-
-- `index.html` — readable top-five status page
-- `status.json` — machine-readable status data
-- `project-status.md` — Markdown status report
+- `index.html` — public all-repository activity surface
+- `status.json` — public-safe machine-readable status data
+- `project-status.md` — public-safe Markdown status report
 - `home-pc-tasks.md` — public tasks found through the `home-pc` label
 
-## Live top-five behaviour
+Private build output in `private-build/`:
 
-The engine scans a recent candidate pool, scores current activity, and publishes no more than five projects.
+- `index.html` — private top-five owner dashboard
+- `status.json` — unredacted top-five status data
+- `project-status.md` — private top-five Markdown report
+- `home-pc-tasks.md` — top-five owner tasks labelled `home-pc`
+
+`private-build/` is not committed and is not included in the public Pages artifact.
+
+## Activity ranking
 
 Ranking deliberately gives more weight to current work than stale backlog. The score uses:
 
@@ -41,21 +70,19 @@ Ranking deliberately gives more weight to current work than stale backlog. The s
 - open PRs and workflow labels as secondary attention signals
 - old open issue count only as a small signal
 
-The default activity window is 30 days. `status.json` includes score components for public projects and an aggregate private-safe score for redacted private projects.
+The default activity window is 30 days.
 
 ## Repository discovery
 
 Without `PROJECT_STATUS_TOKEN`, the workflow safely falls back to public owner repositories.
 
-With `PROJECT_STATUS_TOKEN`, the engine can discover repositories owned by the authenticated user across all visibility levels. The workflow repository's default `GITHUB_TOKEN` is not assumed to have access to other private repositories.
+With `PROJECT_STATUS_TOKEN`, the engine discovers repositories owned by the authenticated user across all visibility levels. The workflow repository's default `GITHUB_TOKEN` is not assumed to have access to other private repositories.
 
-For private activity to influence ranking, create a GitHub Actions repository secret named `PROJECT_STATUS_TOKEN`. The token must have read access to the private repositories that should contribute to ranking.
+The workflow scans up to 100 owner repositories so the current complete pool can be represented without a manual allowlist.
 
-## Public Pages privacy rule
+## Public privacy rule
 
-The Pages deployment is public.
-
-Private repositories may influence ranking, but generated public outputs redact private details. They do not publish:
+The public Pages deployment must not reveal:
 
 - private repository names
 - private repository URLs
@@ -63,9 +90,9 @@ Private repositories may influence ranking, but generated public outputs redact 
 - private PR titles or URLs
 - private commit messages or URLs
 
-A selected private repository appears only as a generic label such as `Private project #2`, together with rank, aggregate score, and a broad activity reason.
-
 Private scan errors are also redacted.
+
+The private owner dashboard is never placed under `public/` and is never included in the GitHub Pages artifact.
 
 ## How it runs
 
@@ -74,21 +101,23 @@ The workflow runs:
 - manually through Actions
 - every 15 minutes by schedule
 - after pushes to `main`
+- on pull requests for validation, without deployment
 
-Before generation, the workflow runs deterministic standard-library tests.
+Before generation, the workflow runs deterministic standard-library tests. It then validates that public and private output trees are separate before uploading only `public/` to GitHub Pages.
 
 ## Configuration
 
 Environment variables:
 
 - `STATUS_OWNER` — GitHub owner login
-- `STATUS_MAX_REPOS` — candidate repositories to inspect, default `30`
+- `STATUS_MAX_REPOS` — candidate repositories to inspect, workflow value `100`
 - `STATUS_MAX_ITEMS` — open issues and PRs read per repository, default `8`
-- `STATUS_PROJECT_LIMIT` — published project count, default `5`
+- `STATUS_PROJECT_LIMIT` — private owner dashboard size, default `5`
 - `STATUS_ACTIVITY_WINDOW_DAYS` — recent-activity window, default `30`
-- `STATUS_OUT_DIR` — generated output directory, default `public`
+- `STATUS_OUT_DIR` — public generated output directory, default `public`
+- `PRIVATE_STATUS_OUT_DIR` — private generated output directory, default `private-build`
 - `PROJECT_STATUS_TOKEN` — optional token for authenticated cross-repository discovery
-- `GITHUB_TOKEN` — API token used for the public fallback and standard workflow access
+- `GITHUB_TOKEN` — API token used for public fallback and standard workflow access
 
 ## Labels the engine understands
 
@@ -104,10 +133,11 @@ The engine still runs without these labels, but they add secondary attention sig
 
 ## Current scope
 
-- scans a recent automatic repository candidate pool
-- ignores archived repositories and forks
-- ranks recent activity rather than stale backlog
-- publishes only the five busiest projects
-- supports authenticated private-repository discovery
-- redacts private repository details from every public output
-- deploys a generated GitHub Pages status board
+- automatic owner-repository discovery
+- one shared scan and ranking pass
+- public all-repository privacy-safe surface
+- private unredacted top-five owner dashboard build
+- recent-activity ranking rather than stale-backlog ranking
+- archived repositories and forks ignored
+- GitHub Pages deployment for the public surface only
+- private authenticated hosting still to be attached
