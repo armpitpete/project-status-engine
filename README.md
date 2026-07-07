@@ -111,3 +111,5 @@ The engine still runs without these labels, but they add secondary attention sig
 - supports authenticated private-repository discovery
 - redacts private repository details from every public output
 - deploys a generated GitHub Pages status board
+
+<!-- temporary verification probe: PROJECT_STATUS_TOKEN -->
