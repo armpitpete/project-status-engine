@@ -38,7 +38,14 @@ The private owner view contains only the five busiest repositories from the same
 - `Do Next` is derived only from those same five repositories and may include private work;
 - this output must be served only behind real authentication.
 
-The workflow currently generates the private view into `private-build/` on the ephemeral runner but does not upload it into the public Pages artifact. An authenticated deployment target is the next delivery layer.
+The private delivery target is the existing Oracle/Virtualmin command surface protected by Cloudflare Access:
+
+- URL: `https://command.vaelinya.uk/private/project-status-engine/`
+- SSH host: `server.vaelinya.uk`
+- SSH user: `vaelinya`
+- target path: `/home/vaelinya/public_html/private/project-status-engine/`
+
+The deploy script is `scripts/deploy_private_dashboard.sh`. It mirrors `private-build/` to the target with `rsync --delete` and strict SSH host-key checking.
 
 ## What it generates
 
@@ -56,7 +63,18 @@ Private build output in `private-build/`:
 - `project-status.md` — private top-five Markdown report
 - `home-pc-tasks.md` — top-five owner tasks labelled `home-pc`
 
-`private-build/` is not committed and is not included in the public Pages artifact.
+`private-build/` is not committed and must never be included in the public Pages artifact.
+
+## Private deployment credentials
+
+The GitHub Actions deployment wiring expects a dedicated SSH key for the `vaelinya` server account and a pinned known-hosts entry.
+
+Required repository secrets:
+
+- `ORACLE_SSH_PRIVATE_KEY` — dedicated private key used only for this deployment lane
+- `ORACLE_SSH_KNOWN_HOSTS` — pinned `known_hosts` line for `server.vaelinya.uk`
+
+The public half of the workflow must remain deployable without private dashboard exposure. Private deployment must be skipped on pull-request events.
 
 ## Activity ranking
 
@@ -105,6 +123,8 @@ The workflow runs:
 
 Before generation, the workflow runs deterministic standard-library tests. It then validates that public and private output trees are separate before uploading only `public/` to GitHub Pages.
 
+The private deployment lane uses the same build output and ranking result, then sends `private-build/` directly to the Oracle target. It must not use a public intermediate artifact.
+
 ## Configuration
 
 Environment variables:
@@ -118,6 +138,9 @@ Environment variables:
 - `PRIVATE_STATUS_OUT_DIR` — private generated output directory, default `private-build`
 - `PROJECT_STATUS_TOKEN` — optional token for authenticated cross-repository discovery
 - `GITHUB_TOKEN` — API token used for public fallback and standard workflow access
+- `ORACLE_SSH_HOST` — deploy host override, default `server.vaelinya.uk`
+- `ORACLE_SSH_USER` — deploy user override, default `vaelinya`
+- `ORACLE_PRIVATE_DASHBOARD_PATH` — deploy target override, default `/home/vaelinya/public_html/private/project-status-engine/`
 
 ## Labels the engine understands
 
@@ -139,5 +162,6 @@ The engine still runs without these labels, but they add secondary attention sig
 - private unredacted top-five owner dashboard build
 - recent-activity ranking rather than stale-backlog ranking
 - archived repositories and forks ignored
-- GitHub Pages deployment for the public surface only
-- private authenticated hosting still to be attached
+- GitHub Pages deployment for the public surface
+- Oracle/Virtualmin target contract and rsync deployment script for the private owner dashboard
+- Cloudflare Access remains the authentication boundary for the command/private surface
