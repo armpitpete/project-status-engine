@@ -22,7 +22,7 @@ The engine performs one automatic repository scan and one ranking pass, then der
 
 ### Public surface
 
-The public GitHub Pages site shows the full discovered repository pool, currently expected to be around 34 repositories.
+The public GitHub Pages site shows the full discovered repository pool. The number of repositories is discovered at runtime and must not be maintained as a hard-coded portfolio count.
 
 - public repositories may show public names, links, issues and PRs;
 - private repositories remain anonymous and redacted;
