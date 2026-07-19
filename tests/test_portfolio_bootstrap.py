@@ -110,6 +110,21 @@ class PortfolioBootstrapTests(unittest.TestCase):
             "manuscript",
         )
 
+    def test_classification_does_not_depend_on_repository_name(self):
+        paths = ["README.md"]
+        first = {"name": "novel-title", "description": "", "topics": []}
+        second = {"name": "unrelated-name", "description": "", "topics": []}
+        self.assertEqual(subject.classify_project(first, paths), "documentation")
+        self.assertEqual(subject.classify_project(second, paths), "documentation")
+
+    def test_classifies_from_generic_repository_metadata(self):
+        repo = {
+            "name": "opaque-project",
+            "description": "A controlled novel manuscript and proofing repository",
+            "topics": [],
+        }
+        self.assertEqual(subject.classify_project(repo, ["README.md"]), "manuscript")
+
     def test_accepts_existing_weighted_overall_contract(self):
         contract = {
             "schema_version": 1,
