@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "authority": "README.md",
+  "project_type": "software",
+  "note": "Pilot self-reporting contract. Completed stages are already implemented and documented on main. Future delivery stages remain zero until separately implemented and verified. No overall percentage is enabled because milestone weights have not been approved.",
+  "stages": [
+    {
+      "id": "activity_dashboard",
+      "label": "Activity ranking and public/private dashboard split",
+      "completed": 1,
+      "total": 1,
+      "evidence": "README.md#two-views-one-engine"
+    },
+    {
+      "id": "completion_authority_engine",
+      "label": "Authority-backed completion calculation",
+      "completed": 1,
+      "total": 1,
+      "evidence": "README.md#completion-authority"
+    },
+    {
+      "id": "private_authenticated_delivery",
+      "label": "Authenticated private dashboard delivery",
+      "completed": 0,
+      "total": 1,
+      "evidence": "README.md#private-owner-dashboard"
+    },
+    {
+      "id": "daily_readme_synchroniser",
+      "label": "Daily authority-backed README synchroniser",
+      "completed": 0,
+      "total": 1,
+      "evidence": "README.md#how-it-runs"
+    }
+  ],
+  "overall": {
+    "enabled": false
+  }
+}
