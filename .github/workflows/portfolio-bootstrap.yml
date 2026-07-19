@@ -1,0 +1,131 @@
+name: Portfolio completion bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Audit, open/update bootstrap PRs, or merge the exact revalidated bootstrap set
+        required: true
+        type: choice
+        options:
+          - audit
+          - apply
+          - merge-approved
+        default: audit
+  schedule:
+    - cron: "47 4 * * 0"
+      timezone: "Europe/London"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/portfolio-bootstrap.yml"
+      - "scripts/portfolio_bootstrap.py"
+      - "tests/test_portfolio_bootstrap.py"
+      - "docs/PORTFOLIO_BOOTSTRAP.md"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/portfolio-bootstrap.yml"
+      - "scripts/portfolio_bootstrap.py"
+      - "tests/test_portfolio_bootstrap.py"
+      - "docs/PORTFOLIO_BOOTSTRAP.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portfolio-completion-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run deterministic tests
+        run: python -m unittest discover -s tests -p "test_*.py"
+
+      - name: Prove bootstrap policy contains no repository identity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          paths = [
+              Path("scripts/portfolio_bootstrap.py"),
+              Path("docs/PORTFOLIO_BOOTSTRAP.md"),
+              Path(".github/workflows/portfolio-bootstrap.yml"),
+          ]
+          text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+          assert ("github.com/" + "armpitpete/") not in text
+          assert ("curious-world" + "-of-ellie-morcant") not in text
+          print("Verified identity-free portfolio bootstrap implementation.")
+          PY
+
+  audit:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'audit'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Audit portfolio without writes
+        env:
+          README_SYNC_TOKEN: ${{ secrets.README_SYNC_TOKEN || secrets.PROJECT_STATUS_TOKEN }}
+          STATUS_OWNER: armpitpete
+        run: python scripts/portfolio_bootstrap.py
+
+  bootstrap:
+    needs: validate
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'apply')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Inventory and bootstrap the complete active portfolio
+        env:
+          README_SYNC_TOKEN: ${{ secrets.README_SYNC_TOKEN || secrets.PROJECT_STATUS_TOKEN }}
+          STATUS_OWNER: armpitpete
+        run: python scripts/portfolio_bootstrap.py --apply
+
+  merge-approved:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'merge-approved'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Revalidate and bulk-merge the exact bootstrap PR set
+        env:
+          README_SYNC_TOKEN: ${{ secrets.README_SYNC_TOKEN || secrets.PROJECT_STATUS_TOKEN }}
+          STATUS_OWNER: armpitpete
+        run: python scripts/portfolio_bootstrap.py --merge-approved
