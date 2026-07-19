@@ -231,4 +231,18 @@ Labels do not affect completion percentages.
 - private authenticated hosting still to be attached.
 
 <!-- AUTO:PROJECT-COMPLETION:START -->
+## Completion
+
+_Generated from validated project authority by `project-status-engine`. Repository activity is not completion._
+
+| Stage | Progress |
+|---|---:|
+| Activity ranking and public/private dashboard split | `1/1` — **100.0%** |
+| Authority-backed completion calculation | `1/1` — **100.0%** |
+| Authenticated private dashboard delivery | `0/1` — **0.0%** |
+| Daily authority-backed README synchroniser | `1/1` — **100.0%** |
+
+Authority: `README.md`
+
+Overall completion is not enabled for this project.
 <!-- AUTO:PROJECT-COMPLETION:END -->
