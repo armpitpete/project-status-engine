@@ -138,6 +138,8 @@
 
 def apply_plan(plan: RepositoryPlan, client: GitHubClient, *, apply: bool) -> Result:
     identifier = target_id(plan.full_name)
+    if plan.action == "failure":
+        return Result(identifier, "failure", plan.exception_code)
     if plan.action == "exception":
         if apply:
             client.upsert_exception_issue(
@@ -182,15 +184,15 @@ def apply_plan(plan: RepositoryPlan, client: GitHubClient, *, apply: bool) -> Re
 
 def run(client: GitHubClient, *, apply: bool) -> list[Result]:
     repos = active_repositories(client.repositories())
+    if not repos:
+        raise BootstrapClosed("repository_inventory_empty")
     plans: list[RepositoryPlan] = []
     results: list[Result] = []
     for repo in repos:
         full_name = repo["full_name"]
         try:
             plans.append(plan_repository(repo, client))
-        except (BootstrapClosed, ApiFailure) as exc:
-            code = exc.code if hasattr(exc, "code") else "closed"
-            detail = exc.detail if isinstance(exc, BootstrapClosed) else ""
+        except ApiFailure as exc:
             plans.append(
                 RepositoryPlan(
                     full_name,
@@ -198,3 +200,58 @@ def run(client: GitHubClient, *, apply: bool) -> list[Result]:
                     repo["default_branch"],
                     "",
                     "unknown",
+                    "failure",
+                    {},
+                    exc.code,
+                    "",
+                )
+            )
+        except BootstrapClosed as exc:
+            plans.append(
+                RepositoryPlan(
+                    full_name,
+                    bool(repo.get("private")),
+                    repo["default_branch"],
+                    "",
+                    "unknown",
+                    "exception",
+                    {},
+                    exc.code,
+                    exc.detail,
+                )
+            )
+    for plan in plans:
+        try:
+            result = apply_plan(plan, client, apply=apply)
+        except (BootstrapClosed, ApiFailure) as exc:
+            code = exc.code if hasattr(exc, "code") else "closed"
+            result = Result(target_id(plan.full_name), "failure", code)
+        results.append(result)
+        if result.action in {
+            "exception",
+            "failure",
+            "opened_pr",
+            "updated_pr",
+            "would_update",
+            "pending_pr",
+        }:
+            print(safe_event(result))
+    failed = has_infrastructure_failures(results)
+    status = "failed" if failed else "complete"
+    if apply:
+        if not REPORT_REPO or not REPORT_SHA:
+            raise BootstrapClosed("report_context_missing")
+        client.write_commit(
+            REPORT_REPO,
+            REPORT_BRANCH,
+            REPORT_SHA,
+            {REPORT_PATH: aggregate_run_report("apply", len(repos), results, status)},
+            "Record portfolio completion bootstrap report",
+        )
+    summary: dict[str, int] = {"inventory": len(repos)}
+    for result in results:
+        summary[result.action] = summary.get(result.action, 0) + 1
+    print(json.dumps({"status": status, **summary}, sort_keys=True, separators=(",", ":")))
+    if failed:
+        raise BootstrapClosed("portfolio_infrastructure_failure")
+    return results

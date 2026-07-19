@@ -148,6 +148,8 @@ jobs:
         env:
           README_SYNC_TOKEN: ${{ secrets.README_SYNC_TOKEN || secrets.PROJECT_STATUS_TOKEN }}
           STATUS_OWNER: armpitpete
+          STATUS_REPORT_REPO: ${{ github.repository }}
+          STATUS_REPORT_SHA: ${{ github.sha }}
         run: python scripts/portfolio_bootstrap.py --apply
 
       - name: Mark portfolio bootstrap successful
