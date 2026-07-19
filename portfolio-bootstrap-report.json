@@ -1,0 +1,21 @@
+{
+  "actions": {
+    "exception": 42,
+    "opened_pr": 5,
+    "unchanged": 3
+  },
+  "codes": {
+    "insufficient_authority": 42
+  },
+  "inventory": 50,
+  "inventory_sources": {
+    "authenticated": 50,
+    "public": 19,
+    "union": 50
+  },
+  "minimum_inventory": 49,
+  "mode": "apply",
+  "schema_version": 1,
+  "source_sha": "431e5831c6ad1f7711d188e10fc66558ff56824c",
+  "status": "complete"
+}
