@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "targets": [
+    {
+      "id": "pilot-01",
+      "project_type": "manuscript",
+      "authority": "docs/REPOSITORY_AUTHORITY.md",
+      "private": true,
+      "stage_ids": [
+        "editorially_complete_manuscript",
+        "publication_assembly",
+        "docx_preflight",
+        "pdf_preflight"
+      ]
+    },
+    {
+      "id": "pilot-02",
+      "project_type": "language-canon",
+      "authority": "20_Language/LANGUAGE_ARCHITECTURE.md",
+      "private": true,
+      "stage_ids": [
+        "core_grammar_decisions"
+      ]
+    },
+    {
+      "id": "pilot-03",
+      "project_type": "software",
+      "authority": "README.md",
+      "private": false,
+      "stage_ids": [
+        "activity_dashboard",
+        "completion_authority_engine",
+        "private_authenticated_delivery",
+        "daily_readme_synchroniser"
+      ]
+    }
+  ]
+}
