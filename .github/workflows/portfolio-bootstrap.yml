@@ -21,6 +21,7 @@ on:
     paths:
       - ".github/workflows/portfolio-bootstrap.yml"
       - "scripts/portfolio_bootstrap.py"
+      - "scripts/portfolio_bootstrap_parts/**"
       - "tests/test_portfolio_bootstrap.py"
       - "docs/PORTFOLIO_BOOTSTRAP.md"
   push:
@@ -29,6 +30,7 @@ on:
     paths:
       - ".github/workflows/portfolio-bootstrap.yml"
       - "scripts/portfolio_bootstrap.py"
+      - "scripts/portfolio_bootstrap_parts/**"
       - "tests/test_portfolio_bootstrap.py"
       - "docs/PORTFOLIO_BOOTSTRAP.md"
 
@@ -61,6 +63,7 @@ jobs:
 
           paths = [
               Path("scripts/portfolio_bootstrap.py"),
+              *sorted(Path("scripts/portfolio_bootstrap_parts").glob("part*.inc")),
               Path("docs/PORTFOLIO_BOOTSTRAP.md"),
               Path(".github/workflows/portfolio-bootstrap.yml"),
           ]
