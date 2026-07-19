@@ -125,6 +125,38 @@ class PortfolioBootstrapTests(unittest.TestCase):
         }
         self.assertEqual(subject.classify_project(repo, ["README.md"]), "manuscript")
 
+    def test_aggregate_report_excludes_target_identifiers(self):
+        secret_target = "a" * 64
+        report = subject.aggregate_run_report(
+            "apply",
+            49,
+            [
+                subject.Result(secret_target, "exception", "insufficient_authority"),
+                subject.Result("b" * 64, "opened_pr"),
+            ],
+            "complete",
+        ).decode("utf-8")
+        self.assertNotIn(secret_target, report)
+        self.assertNotIn("b" * 64, report)
+        self.assertIn('"inventory": 49', report)
+        self.assertIn('"insufficient_authority": 1', report)
+
+    def test_evidence_exceptions_do_not_fail_the_run(self):
+        results = [subject.Result("a" * 64, "exception", "insufficient_authority")]
+        self.assertFalse(subject.has_infrastructure_failures(results))
+
+    def test_infrastructure_failures_fail_the_run(self):
+        results = [subject.Result("a" * 64, "failure", "api_create_issue_403")]
+        self.assertTrue(subject.has_infrastructure_failures(results))
+
+    def test_empty_inventory_fails_closed(self):
+        class EmptyClient:
+            def repositories(self):
+                return []
+
+        with self.assertRaisesRegex(subject.BootstrapClosed, "repository_inventory_empty"):
+            subject.run(EmptyClient(), apply=False)
+
     def test_accepts_existing_weighted_overall_contract(self):
         contract = {
             "schema_version": 1,
