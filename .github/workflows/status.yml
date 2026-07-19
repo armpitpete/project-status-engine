@@ -67,67 +67,86 @@ jobs:
           test ! -e public/internal-build
           test ! -e public/completion-status.json
           python - <<'PY'
+          import hashlib
           import json
           from pathlib import Path
 
           internal_path = Path("internal-build/completion-status.json")
           internal = json.loads(internal_path.read_text(encoding="utf-8"))
-          repositories = {item["full_name"]: item for item in internal["repositories"]}
 
+          def identifier(value):
+              return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+          repositories = {
+              identifier(item["full_name"]): item
+              for item in internal["repositories"]
+          }
           expected = {
-              "armpitpete/unmurderous-objects": {
-                  "editorially_complete_manuscript": 100.0,
-                  "publication_assembly": 0.0,
-                  "docx_preflight": 0.0,
-                  "pdf_preflight": 0.0,
+              "f4bd0f81901b311923299ad5174e1b3bc50167759807df6e32ce7a7918ecb558": {
+                  "private": True,
+                  "stages": {
+                      "editorially_complete_manuscript": 100.0,
+                      "publication_assembly": 0.0,
+                      "docx_preflight": 0.0,
+                      "pdf_preflight": 0.0,
+                  },
               },
-              "armpitpete/vaelinya-canon": {
-                  "core_grammar_decisions": 70.0,
+              "a9d982e951dea194402d06da59225ec269f96796f1762a9a46be7cec0fc16326": {
+                  "private": True,
+                  "stages": {
+                      "core_grammar_decisions": 70.0,
+                  },
               },
-              "armpitpete/project-status-engine": {
-                  "activity_dashboard": 100.0,
-                  "completion_authority_engine": 100.0,
-                  "private_authenticated_delivery": 0.0,
-                  "daily_readme_synchroniser": 0.0,
+              "3d083aac4dc7536e71f5a969df5161e2da8ffc1422226695325e469954d02834": {
+                  "private": False,
+                  "stages": {
+                      "activity_dashboard": 100.0,
+                      "completion_authority_engine": 100.0,
+                      "private_authenticated_delivery": 0.0,
+                      "daily_readme_synchroniser": 0.0,
+                  },
               },
           }
 
-          for name, expected_stages in expected.items():
-              assert name in repositories, f"missing pilot repository: {name}"
-              record = repositories[name]
+          for target_hash, expectation in expected.items():
+              assert target_hash in repositories, "missing pilot target"
+              record = repositories[target_hash]
               completion = record["completion"]
-              assert completion["state"] == "valid", (name, completion)
+              assert completion["state"] == "valid"
               actual_stages = {
                   stage["id"]: stage["percentage"]
                   for stage in completion["stages"]
               }
-              assert actual_stages == expected_stages, (name, actual_stages)
-              assert completion["overall_percentage"] is None, name
-
-          assert repositories["armpitpete/unmurderous-objects"]["private"] is True
-          assert repositories["armpitpete/vaelinya-canon"]["private"] is True
-          assert repositories["armpitpete/project-status-engine"]["private"] is False
+              assert actual_stages == expectation["stages"]
+              assert completion["overall_percentage"] is None
+              assert record["private"] is expectation["private"]
 
           public_text = "\n".join(
               path.read_text(encoding="utf-8")
               for path in Path("public").rglob("*")
               if path.is_file()
           )
-          for private_name in (
-              "armpitpete/unmurderous-objects",
-              "armpitpete/vaelinya-canon",
-          ):
-              assert private_name not in public_text, private_name
-              completion = repositories[private_name]["completion"]
-              assert completion["authority"] not in public_text
+          for target_hash, expectation in expected.items():
+              if not expectation["private"]:
+                  continue
+              record = repositories[target_hash]
+              completion = record["completion"]
+              forbidden = [
+                  record["full_name"],
+                  record.get("url") or "",
+                  completion["authority"],
+              ]
               for stage in completion["stages"]:
-                  assert stage["label"] not in public_text
+                  forbidden.append(stage["label"])
                   if stage.get("evidence"):
-                      assert stage["evidence"] not in public_text
+                      forbidden.append(stage["evidence"])
+              for value in forbidden:
+                  if value:
+                      assert value not in public_text
 
           print(
-              "Verified internal full-owner dataset for three pilots; "
-              "public output contains no private pilot identity or completion detail."
+              "Verified three opaque pilot targets; public output contains no "
+              "private identity or completion detail."
           )
           PY
 
