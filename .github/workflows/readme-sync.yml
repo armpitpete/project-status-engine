@@ -18,8 +18,10 @@ on:
       - ".github/workflows/readme-sync.yml"
       - "config/readme-sync-pilots.json"
       - "scripts/readme_sync.py"
+      - "scripts/readme_sync_runner.py"
       - "scripts/resolve_readme_pilots.py"
       - "tests/test_readme_sync.py"
+      - "tests/test_readme_sync_runner.py"
       - "tests/test_resolve_readme_pilots.py"
   push:
     branches:
@@ -28,8 +30,10 @@ on:
       - ".github/workflows/readme-sync.yml"
       - "config/readme-sync-pilots.json"
       - "scripts/readme_sync.py"
+      - "scripts/readme_sync_runner.py"
       - "scripts/resolve_readme_pilots.py"
       - "tests/test_readme_sync.py"
+      - "tests/test_readme_sync_runner.py"
       - "tests/test_resolve_readme_pilots.py"
 
 permissions:
@@ -111,7 +115,7 @@ jobs:
         env:
           README_SYNC_TOKEN: ${{ secrets.README_SYNC_TOKEN || secrets.PROJECT_STATUS_TOKEN }}
         run: >-
-          python scripts/readme_sync.py
+          python scripts/readme_sync_runner.py
           --dataset internal-build/completion-status.json
           --allowlist internal-build/readme-sync-targets.json
           --apply

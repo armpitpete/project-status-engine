@@ -69,7 +69,6 @@ jobs:
           python - <<'PY'
           import hashlib
           import json
-          import os
           from pathlib import Path
           import sys
 
@@ -94,9 +93,6 @@ jobs:
                   strict=True,
               )
           }
-          synchroniser_expected = (
-              0.0 if os.environ.get("GITHUB_EVENT_NAME") == "pull_request" else 100.0
-          )
           expected = {
               "pilot-01": {
                   "private": True,
@@ -119,7 +115,7 @@ jobs:
                       "activity_dashboard": 100.0,
                       "completion_authority_engine": 100.0,
                       "private_authenticated_delivery": 0.0,
-                      "daily_readme_synchroniser": synchroniser_expected,
+                      "daily_readme_synchroniser": 100.0,
                   },
               },
           }
