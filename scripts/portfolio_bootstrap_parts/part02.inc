@@ -59,18 +59,26 @@ def authority_candidates(paths: Iterable[str]) -> list[str]:
 
 def classify_project(repo: dict[str, Any], paths: Iterable[str]) -> str:
     lower = {path.lower() for path in paths}
-    name = str(repo.get("name") or "").lower()
     suffixes = {PurePosixPath(path).suffix.lower() for path in lower}
+    topics = repo.get("topics") if isinstance(repo.get("topics"), list) else []
+    metadata = " ".join(
+        [str(repo.get("description") or ""), *(str(topic) for topic in topics)]
+    ).lower()
 
     manuscript = any(
         part in path
         for path in lower
         for part in ("manuscript/", "chapters/", "scenes/", "publication/", "proofs/")
-    ) or any(word in name for word in ("ghost", "angels", "blackhope", "sins", "objects", "pilgrims", "romance", "departures"))
+    ) or any(
+        term in metadata
+        for term in ("manuscript", "novel", "novella", "fiction", "poetry", "story collection")
+    )
     website = any(
         path in lower
         for path in ("astro.config.mjs", "astro.config.ts", "next.config.js", "wrangler.toml")
-    ) or any(path.startswith("src/pages/") for path in lower)
+    ) or any(path.startswith("src/pages/") for path in lower) or any(
+        term in metadata for term in ("website", "web site", "static site")
+    )
     software = any(
         path in lower
         for path in (
@@ -83,10 +91,10 @@ def classify_project(repo: dict[str, Any], paths: Iterable[str]) -> str:
         )
     )
     hardware = bool(suffixes & {".kicad_pcb", ".kicad_sch", ".sch", ".brd", ".gbr"}) or any(
-        word in name for word in ("mfos", "eurorack", "synth-standards")
+        term in metadata for term in ("hardware", "pcb", "eurorack", "synthesizer module")
     )
     music = bool(suffixes & {".wav", ".flac", ".mp3", ".mid", ".midi"}) or any(
-        word in name for word in ("music", "song", "sound")
+        term in metadata for term in ("music", "song archive", "audio recordings")
     )
 
     # Strong domain fingerprints take precedence over implementation tooling.
