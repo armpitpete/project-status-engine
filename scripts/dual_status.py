@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build public all-repository and private top-five views from one GitHub scan."""
+"""Build public and private project-status views from one GitHub scan."""
 from __future__ import annotations
 
 import copy
@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import completion_status as completion
 import live_status as core
 
 PUBLIC_OUT_DIR = Path(os.getenv("STATUS_OUT_DIR", "public"))
@@ -45,7 +46,8 @@ def collect_ranked() -> tuple[list[dict[str, Any]], list[str], dt.datetime]:
             f"/repos/{name}/commits",
             {"author": core.OWNER, "since": since, "per_page": 100},
         )
-        for error in (issue_error, pr_error, latest_error, recent_error):
+        progress, progress_error = completion.fetch_repository_progress(name, core.api_get)
+        for error in (issue_error, pr_error, latest_error, recent_error, progress_error):
             if error:
                 errors.append(core.safe_error(private, name, error))
 
@@ -65,6 +67,7 @@ def collect_ranked() -> tuple[list[dict[str, Any]], list[str], dt.datetime]:
             "latest_commit": latest[0] if latest else None,
             "recent_commit_count": len(recent_raw or []),
             "status": core.project_status(issues, prs),
+            "completion": progress,
         }
         project["filter_tags"] = core.project_tags(project)
         projects.append(project)
@@ -72,7 +75,13 @@ def collect_ranked() -> tuple[list[dict[str, Any]], list[str], dt.datetime]:
     return core.rank_projects(projects, now), errors, now
 
 
-def base_data(projects: list[dict[str, Any]], ranked_count: int, errors: list[str], now: dt.datetime, view: str) -> dict[str, Any]:
+def base_data(
+    projects: list[dict[str, Any]],
+    ranked_count: int,
+    errors: list[str],
+    now: dt.datetime,
+    view: str,
+) -> dict[str, Any]:
     data = {
         "view": view,
         "owner": core.OWNER,
@@ -84,10 +93,13 @@ def base_data(projects: list[dict[str, Any]], ranked_count: int, errors: list[st
         "errors": errors,
     }
     data["summary"] = core.summary_for(projects)
+    data["completion_summary"] = completion.summary_for(projects, include_private=view == "private")
     return data
 
 
-def build_public_data(ranked: list[dict[str, Any]], errors: list[str], now: dt.datetime) -> dict[str, Any]:
+def build_public_data(
+    ranked: list[dict[str, Any]], errors: list[str], now: dt.datetime
+) -> dict[str, Any]:
     """Public view contains every ranked candidate, with private projects redacted."""
     projects = [core.public_project(project, rank) for rank, project in enumerate(ranked, 1)]
     data = base_data(projects, len(ranked), errors, now, "public")
@@ -101,7 +113,9 @@ def owner_priority(projects: list[dict[str, Any]], limit: int = 5) -> list[dict[
     for project in projects:
         if project["open_prs"]:
             item = project["open_prs"][0]
-            candidates.append((1, item.get("updated_at", ""), project, item, "pr", "Open PR needs review or merge decision."))
+            candidates.append(
+                (1, item.get("updated_at", ""), project, item, "pr", "Open PR needs review or merge decision.")
+            )
         chosen = next(
             (
                 issue
@@ -111,7 +125,16 @@ def owner_priority(projects: list[dict[str, Any]], limit: int = 5) -> list[dict[
             project["open_issues"][0] if project["open_issues"] else None,
         )
         if chosen:
-            candidates.append((0 if project["status"] == "blocked" else 4, chosen.get("updated_at", ""), project, chosen, "issue", "Open issue."))
+            candidates.append(
+                (
+                    0 if project["status"] == "blocked" else 4,
+                    chosen.get("updated_at", ""),
+                    project,
+                    chosen,
+                    "issue",
+                    "Open issue.",
+                )
+            )
 
     candidates.sort(key=lambda row: (row[0], row[1]), reverse=False)
     return [
@@ -127,7 +150,12 @@ def owner_priority(projects: list[dict[str, Any]], limit: int = 5) -> list[dict[
     ]
 
 
-def build_private_data(ranked: list[dict[str, Any]], errors: list[str], now: dt.datetime, limit: int | None = None) -> dict[str, Any]:
+def build_private_data(
+    ranked: list[dict[str, Any]],
+    errors: list[str],
+    now: dt.datetime,
+    limit: int | None = None,
+) -> dict[str, Any]:
     """Owner view contains only the real, unredacted top repositories."""
     limit = core.PROJECT_LIMIT if limit is None else limit
     projects: list[dict[str, Any]] = []
@@ -140,25 +168,39 @@ def build_private_data(ranked: list[dict[str, Any]], errors: list[str], now: dt.
     return data
 
 
+def _inject_completion(html_text: str, data: dict[str, Any]) -> str:
+    section = completion.render_html(data)
+    marker = "</main>"
+    return html_text.replace(marker, f"{section}{marker}", 1)
+
+
 def render_public_html(data: dict[str, Any]) -> str:
-    return (
+    html_text = (
         core.render_html(data)
-        .replace("Live top-five activity view generated from GitHub.", "Public all-repository activity surface generated from GitHub.")
+        .replace(
+            "Live top-five activity view generated from GitHub.",
+            "Public all-repository activity and completion surface generated from GitHub.",
+        )
         .replace("Top five by recent activity.", "All discovered repositories by recent activity.")
     )
+    return _inject_completion(html_text, data)
 
 
 def render_private_html(data: dict[str, Any]) -> str:
     render_data = copy.deepcopy(data)
     for project in render_data["projects"]:
         project["private"] = False
-    return (
+    html_text = (
         core.render_html(render_data)
-        .replace("Live top-five activity view generated from GitHub.", "Private owner dashboard for the five busiest repositories.")
+        .replace(
+            "Live top-five activity view generated from GitHub.",
+            "Private owner dashboard for the five busiest repositories.",
+        )
         .replace("public issues", "issues")
         .replace("public PRs", "PRs")
         .replace("No public priority items found.", "No priority items found.")
     )
+    return _inject_completion(html_text, data)
 
 
 def owner_home_markdown(data: dict[str, Any]) -> str:
@@ -179,6 +221,7 @@ def write_public_outputs(data: dict[str, Any]) -> None:
     (PUBLIC_OUT_DIR / "status.json").write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     (PUBLIC_OUT_DIR / "index.html").write_text(render_public_html(data), encoding="utf-8")
     (PUBLIC_OUT_DIR / "project-status.md").write_text(core.render_project_markdown(data), encoding="utf-8")
+    (PUBLIC_OUT_DIR / "completion-status.md").write_text(completion.render_markdown(data), encoding="utf-8")
     (PUBLIC_OUT_DIR / "home-pc-tasks.md").write_text(core.render_home_markdown(data), encoding="utf-8")
 
 
@@ -187,10 +230,13 @@ def write_private_outputs(data: dict[str, Any]) -> None:
     (PRIVATE_OUT_DIR / "status.json").write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     (PRIVATE_OUT_DIR / "index.html").write_text(render_private_html(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "project-status.md").write_text(core.render_project_markdown(data), encoding="utf-8")
+    (PRIVATE_OUT_DIR / "completion-status.md").write_text(completion.render_markdown(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "home-pc-tasks.md").write_text(owner_home_markdown(data), encoding="utf-8")
 
 
-def build_views(ranked: list[dict[str, Any]], errors: list[str], now: dt.datetime) -> tuple[dict[str, Any], dict[str, Any]]:
+def build_views(
+    ranked: list[dict[str, Any]], errors: list[str], now: dt.datetime
+) -> tuple[dict[str, Any], dict[str, Any]]:
     return build_public_data(ranked, errors, now), build_private_data(ranked, errors, now)
 
 
@@ -200,8 +246,8 @@ def main() -> int:
     write_public_outputs(public_data)
     write_private_outputs(private_data)
     print(
-        f"Generated public view for {public_data['project_count']} repositories and private top {private_data['project_count']} "
-        f"from {public_data['scanned_candidate_count']} candidates."
+        f"Generated public view for {public_data['project_count']} repositories and private top "
+        f"{private_data['project_count']} from {public_data['scanned_candidate_count']} candidates."
     )
     for error in errors:
         print(f"- {error}", file=sys.stderr)
