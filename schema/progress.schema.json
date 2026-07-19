@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/armpitpete/project-status-engine/schema/progress.schema.json",
+  "title": "Project Status Engine progress authority",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "authority", "stages"],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "authority": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Repository-relative path to the human-approved authority record supporting these figures."
+    },
+    "project_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "note": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "completed", "total"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "completed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "overall": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  }
+}

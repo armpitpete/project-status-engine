@@ -47,6 +47,7 @@ jobs:
           STATUS_MAX_ITEMS: "8"
           STATUS_PROJECT_LIMIT: "5"
           STATUS_ACTIVITY_WINDOW_DAYS: "30"
+          STATUS_PROGRESS_PATH: .project/progress.json
           STATUS_OUT_DIR: public
           PRIVATE_STATUS_OUT_DIR: private-build
         run: python scripts/generate_status.py
@@ -55,8 +56,10 @@ jobs:
         run: |
           test -f public/index.html
           test -f public/status.json
+          test -f public/completion-status.md
           test -f private-build/index.html
           test -f private-build/status.json
+          test -f private-build/completion-status.md
           test ! -e public/private-build
           test ! -e public/private
 
