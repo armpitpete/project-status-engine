@@ -105,7 +105,7 @@ The trusted internal dataset contains every discovered repository, including pri
 - repository URL;
 - validated completion authority and calculated stages.
 
-It excludes issues, pull requests, commits, activity details and dashboard actions. The future README synchroniser will consume this dataset inside the trusted workflow before runner cleanup.
+It excludes issues, pull requests, commits, activity details and dashboard actions. The daily README synchroniser consumes this dataset inside the trusted workflow before runner cleanup.
 
 The dataset is written to `internal-build/completion-status.json`. It is not a dashboard, is never placed under `public/`, and is never included in the GitHub Pages artifact.
 
@@ -170,16 +170,18 @@ The workflow tests public output for private-data leakage. Only `public/` is pas
 
 ## How it runs
 
-The workflow runs:
+The status workflow runs:
 
 - manually through Actions;
 - every 15 minutes for the existing activity surface;
 - after pushes to `main`;
 - on pull requests for validation, without deployment.
 
-Before generation, the workflow runs deterministic standard-library tests. It then generates all three outputs, validates their separation, verifies the three pilot completion contracts, scans public files for private pilot identity and completion details, and uploads only `public/` to GitHub Pages.
+Before generation, the status workflow runs deterministic standard-library tests. It then generates all three outputs, validates their separation, verifies the three pilot completion contracts, scans public files for private pilot identity and completion details, and uploads only `public/` to GitHub Pages.
 
-A future README synchroniser may consume `internal-build/completion-status.json` on a daily schedule. This repository does not yet rewrite other repositories' README files.
+The separate README synchroniser workflow runs daily at 05:17 in `Europe/London` and can also be invoked manually. It consumes `internal-build/completion-status.json`, resolves exactly three contract-selected pilots, updates only explicit marker blocks on `automation/readme-sync`, and opens or updates ready-for-review pull requests. Pull-request and ordinary push events run validation only and perform no cross-repository write.
+
+The complete synchroniser contract is recorded in `docs/README_SYNCHRONISER.md`.
 
 ## Configuration
 
@@ -195,6 +197,7 @@ Environment variables:
 - `PRIVATE_STATUS_OUT_DIR` — private generated output directory, default `private-build`;
 - `INTERNAL_STATUS_OUT_DIR` — trusted full-owner completion output directory, default `internal-build`;
 - `PROJECT_STATUS_TOKEN` — optional token for authenticated cross-repository discovery;
+- `README_SYNC_TOKEN` — preferred dedicated token for pilot README branch and pull-request writes;
 - `GITHUB_TOKEN` — API token used for public fallback and standard workflow access.
 
 ## Labels the activity engine understands
@@ -221,8 +224,11 @@ Labels do not affect completion percentages.
 - private unredacted top-five owner dashboard build;
 - trusted unredacted full-owner completion dataset;
 - explicit public-leakage validation;
+- daily authority-backed README synchronisation for three contract-selected pilots;
 - recent-activity ranking rather than stale-backlog ranking;
 - archived repositories and forks ignored;
 - GitHub Pages deployment for the public surface only;
-- private authenticated hosting still to be attached;
-- README synchronisation still to be implemented as a separate consumer.
+- private authenticated hosting still to be attached.
+
+<!-- AUTO:PROJECT-COMPLETION:START -->
+<!-- AUTO:PROJECT-COMPLETION:END -->
