@@ -70,19 +70,31 @@ jobs:
           import hashlib
           import json
           from pathlib import Path
+          import sys
+
+          sys.path.insert(0, "scripts")
+          import resolve_readme_pilots as resolver
 
           internal_path = Path("internal-build/completion-status.json")
+          selector_path = Path("config/readme-sync-pilots.json")
           internal = json.loads(internal_path.read_text(encoding="utf-8"))
-
-          def identifier(value):
-              return hashlib.sha256(value.encode("utf-8")).hexdigest()
+          selectors = resolver.load_selectors(selector_path)
+          resolved = resolver.resolve(internal_path, selector_path)
 
           repositories = {
-              identifier(item["full_name"]): item
+              hashlib.sha256(item["full_name"].encode("utf-8")).hexdigest(): item
               for item in internal["repositories"]
           }
+          pilot_hashes = {
+              selector["id"]: target_hash
+              for selector, target_hash in zip(
+                  selectors,
+                  resolved["target_hashes"],
+                  strict=True,
+              )
+          }
           expected = {
-              "f4bd0f81901b311923299ad5174e1b3bc50167759807df6e32ce7a7918ecb558": {
+              "pilot-01": {
                   "private": True,
                   "stages": {
                       "editorially_complete_manuscript": 100.0,
@@ -91,13 +103,13 @@ jobs:
                       "pdf_preflight": 0.0,
                   },
               },
-              "a9d982e951dea194402d06da59225ec269f96796f1762a9a46be7cec0fc16326": {
+              "pilot-02": {
                   "private": True,
                   "stages": {
                       "core_grammar_decisions": 70.0,
                   },
               },
-              "3d083aac4dc7536e71f5a969df5161e2da8ffc1422226695325e469954d02834": {
+              "pilot-03": {
                   "private": False,
                   "stages": {
                       "activity_dashboard": 100.0,
@@ -108,9 +120,9 @@ jobs:
               },
           }
 
-          for target_hash, expectation in expected.items():
-              assert target_hash in repositories, "missing pilot target"
-              record = repositories[target_hash]
+          assert set(pilot_hashes) == set(expected)
+          for pilot_id, expectation in expected.items():
+              record = repositories[pilot_hashes[pilot_id]]
               completion = record["completion"]
               assert completion["state"] == "valid"
               actual_stages = {
@@ -126,10 +138,10 @@ jobs:
               for path in Path("public").rglob("*")
               if path.is_file()
           )
-          for target_hash, expectation in expected.items():
+          for pilot_id, expectation in expected.items():
               if not expectation["private"]:
                   continue
-              record = repositories[target_hash]
+              record = repositories[pilot_hashes[pilot_id]]
               completion = record["completion"]
               forbidden = [
                   record["full_name"],
@@ -145,7 +157,7 @@ jobs:
                       assert value not in public_text
 
           print(
-              "Verified three opaque pilot targets; public output contains no "
+              "Verified three contract-selected pilots; public output contains no "
               "private identity or completion detail."
           )
           PY
