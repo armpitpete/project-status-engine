@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       apply:
-        description: Apply pilot README updates
+        description: Apply validated README updates
         required: true
         type: boolean
         default: true
@@ -16,6 +16,7 @@ on:
       - main
     paths:
       - ".github/workflows/readme-sync.yml"
+      - "config/readme-sync-policy.json"
       - "config/readme-sync-pilots.json"
       - "scripts/readme_sync.py"
       - "scripts/readme_sync_runner.py"
@@ -28,6 +29,7 @@ on:
       - main
     paths:
       - ".github/workflows/readme-sync.yml"
+      - "config/readme-sync-policy.json"
       - "config/readme-sync-pilots.json"
       - "scripts/readme_sync.py"
       - "scripts/readme_sync_runner.py"
@@ -58,20 +60,27 @@ jobs:
       - name: Run deterministic tests
         run: python -m unittest discover -s tests -p "test_*.py"
 
-      - name: Prove committed pilot configuration contains no repository identity
+      - name: Prove committed rollout configuration contains no repository identity
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
 
-          path = Path("config/readme-sync-pilots.json")
-          document = json.loads(path.read_text(encoding="utf-8"))
-          assert document["schema_version"] == 1
-          assert len(document["targets"]) == 3
-          text = path.read_text(encoding="utf-8")
+          policy_path = Path("config/readme-sync-policy.json")
+          policy = json.loads(policy_path.read_text(encoding="utf-8"))
+          assert policy == {"schema_version": 1, "mode": "all-valid"}
+
+          baseline_path = Path("config/readme-sync-pilots.json")
+          baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+          assert baseline["schema_version"] == 1
+          assert len(baseline["targets"]) == 3
+
+          text = policy_path.read_text(encoding="utf-8") + baseline_path.read_text(
+              encoding="utf-8"
+          )
           assert "github.com" not in text
           assert "armpitpete/" not in text
-          print("Verified identity-free three-pilot configuration.")
+          print("Verified identity-free all-valid policy and baseline fixtures.")
           PY
 
   synchronise:
@@ -104,14 +113,14 @@ jobs:
           INTERNAL_STATUS_OUT_DIR: internal-build
         run: python scripts/generate_status.py
 
-      - name: Resolve three pilots inside the trusted runner
+      - name: Resolve every valid project inside the trusted runner
         run: >-
           python scripts/resolve_readme_pilots.py
           --dataset internal-build/completion-status.json
-          --selectors config/readme-sync-pilots.json
+          --policy config/readme-sync-policy.json
           --output internal-build/readme-sync-targets.json
 
-      - name: Synchronise pilot README sections
+      - name: Synchronise validated README sections
         env:
           README_SYNC_TOKEN: ${{ secrets.README_SYNC_TOKEN || secrets.PROJECT_STATUS_TOKEN }}
         run: >-

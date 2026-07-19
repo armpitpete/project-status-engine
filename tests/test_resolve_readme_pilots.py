@@ -56,6 +56,27 @@ class ResolverTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         return dataset, selectors
 
+    def policy_inputs(self, repositories, mode="all-valid"):
+        temp = tempfile.TemporaryDirectory()
+        root = Path(temp.name)
+        dataset = root / "dataset.json"
+        policy = root / "policy.json"
+        dataset.write_text(
+            json.dumps(
+                {
+                    "view": "internal-owner-completion",
+                    "repositories": repositories,
+                }
+            ),
+            encoding="utf-8",
+        )
+        policy.write_text(
+            json.dumps({"schema_version": 1, "mode": mode}),
+            encoding="utf-8",
+        )
+        self.addCleanup(temp.cleanup)
+        return dataset, policy
+
     def test_resolves_three_unique_contracts_without_committed_names(self):
         targets = [
             {
@@ -149,6 +170,70 @@ class ResolverTests(unittest.TestCase):
         self.assertNotIn(name, text)
         self.assertNotIn("README.md", text)
         self.assertEqual(len(result["target_hashes"]), 1)
+
+    def test_all_valid_policy_selects_every_valid_repository(self):
+        names = ["owner/z-private", "owner/a-public", "owner/m-private"]
+        repositories = [
+            record(names[0], True, "manuscript", "docs/A.md", ["draft"]),
+            record(names[1], False, "software", "README.md", ["release"]),
+            record(names[2], True, "website", "docs/STATUS.md", ["routes"]),
+            {
+                "full_name": "owner/not-configured",
+                "private": True,
+                "completion": {"state": "not-configured"},
+            },
+            {
+                "full_name": "owner/invalid-authority",
+                "private": False,
+                "completion": {"state": "invalid", "error": "bad contract"},
+            },
+        ]
+        dataset, policy = self.policy_inputs(repositories)
+        result = resolver.resolve_policy(dataset, policy)
+        self.assertEqual(
+            result["target_hashes"],
+            sorted(resolver.identifier(name) for name in names),
+        )
+
+    def test_all_valid_policy_output_contains_no_repository_identity(self):
+        name = "owner/very-private-project"
+        dataset, policy = self.policy_inputs(
+            [record(name, True, "manuscript", "docs/AUTHORITY.md", ["proof"])]
+        )
+        result = resolver.resolve_policy(dataset, policy)
+        text = json.dumps(result)
+        self.assertNotIn(name, text)
+        self.assertNotIn("AUTHORITY", text)
+        self.assertEqual(result["target_hashes"], [resolver.identifier(name)])
+
+    def test_all_valid_policy_fails_when_no_valid_target_exists(self):
+        dataset, policy = self.policy_inputs(
+            [
+                {
+                    "full_name": "owner/unconfigured",
+                    "private": True,
+                    "completion": {"state": "not-configured"},
+                }
+            ]
+        )
+        with self.assertRaisesRegex(resolver.ResolutionClosed, "policy_no_valid_targets"):
+            resolver.resolve_policy(dataset, policy)
+
+    def test_all_valid_policy_rejects_unknown_mode(self):
+        dataset, policy = self.policy_inputs(
+            [record("owner/a", False, "software", "README.md", ["engine"])],
+            mode="all-repositories",
+        )
+        with self.assertRaisesRegex(resolver.ResolutionClosed, "policy_mode"):
+            resolver.resolve_policy(dataset, policy)
+
+    def test_duplicate_repository_record_fails_closed(self):
+        duplicate = record("owner/a", False, "software", "README.md", ["engine"])
+        dataset, policy = self.policy_inputs([duplicate, duplicate])
+        with self.assertRaisesRegex(
+            resolver.ResolutionClosed, "dataset_duplicate_repository"
+        ):
+            resolver.resolve_policy(dataset, policy)
 
 
 if __name__ == "__main__":
