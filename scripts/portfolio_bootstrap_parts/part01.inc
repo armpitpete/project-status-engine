@@ -31,6 +31,10 @@ README_PATH = "README.md"
 BOOTSTRAP_BRANCH = "automation/project-status-bootstrap"
 BOOTSTRAP_PR_TITLE = "Bootstrap authority-backed project completion"
 EXCEPTION_ISSUE_TITLE = "Project completion bootstrap requires authority"
+REPORT_BRANCH = "automation/portfolio-bootstrap-report"
+REPORT_PATH = "portfolio-bootstrap-report.json"
+REPORT_REPO = os.getenv("STATUS_REPORT_REPO", "") or os.getenv("GITHUB_REPOSITORY", "")
+REPORT_SHA = os.getenv("STATUS_REPORT_SHA", "") or os.getenv("GITHUB_SHA", "")
 START_MARKER = b"<!-- AUTO:PROJECT-COMPLETION:START -->"
 END_MARKER = b"<!-- AUTO:PROJECT-COMPLETION:END -->"
 MAX_AUTHORITY_BYTES = 512_000
@@ -128,6 +132,29 @@ class Result:
     target_id: str
     action: str
     code: str | None = None
+
+
+def aggregate_run_report(mode: str, inventory: int, results: list[Result], status: str) -> bytes:
+    actions: dict[str, int] = {}
+    codes: dict[str, int] = {}
+    for result in results:
+        actions[result.action] = actions.get(result.action, 0) + 1
+        if result.code and result.action in {"exception", "failure"}:
+            codes[result.code] = codes.get(result.code, 0) + 1
+    payload = {
+        "schema_version": 1,
+        "status": status,
+        "mode": mode,
+        "source_sha": REPORT_SHA,
+        "inventory": inventory,
+        "actions": dict(sorted(actions.items())),
+        "codes": dict(sorted(codes.items())),
+    }
+    return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def has_infrastructure_failures(results: Iterable[Result]) -> bool:
+    return any(result.action == "failure" for result in results)
 
 
 def target_id(full_name: str) -> str:
