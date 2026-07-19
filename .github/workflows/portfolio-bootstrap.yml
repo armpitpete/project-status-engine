@@ -36,6 +36,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: portfolio-completion-bootstrap
@@ -99,7 +100,42 @@ jobs:
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.mode == 'apply')
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
+      - name: Mark portfolio bootstrap running
+        continue-on-error: true
+        env:
+          STATUS_TOKEN: ${{ github.token }}
+          STATUS_STATE: pending
+          STATUS_DESCRIPTION: Portfolio bootstrap is running
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}",
+              data=json.dumps(
+                  {
+                      "state": os.environ["STATUS_STATE"],
+                      "context": "portfolio-bootstrap",
+                      "description": os.environ["STATUS_DESCRIPTION"],
+                  }
+              ).encode("utf-8"),
+              method="POST",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['STATUS_TOKEN']}",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "Content-Type": "application/json",
+                  "User-Agent": "project-status-engine-bootstrap",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=30):
+              pass
+          PY
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -113,6 +149,76 @@ jobs:
           README_SYNC_TOKEN: ${{ secrets.README_SYNC_TOKEN || secrets.PROJECT_STATUS_TOKEN }}
           STATUS_OWNER: armpitpete
         run: python scripts/portfolio_bootstrap.py --apply
+
+      - name: Mark portfolio bootstrap successful
+        if: success()
+        continue-on-error: true
+        env:
+          STATUS_TOKEN: ${{ github.token }}
+          STATUS_STATE: success
+          STATUS_DESCRIPTION: Portfolio bootstrap completed successfully
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}",
+              data=json.dumps(
+                  {
+                      "state": os.environ["STATUS_STATE"],
+                      "context": "portfolio-bootstrap",
+                      "description": os.environ["STATUS_DESCRIPTION"],
+                  }
+              ).encode("utf-8"),
+              method="POST",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['STATUS_TOKEN']}",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "Content-Type": "application/json",
+                  "User-Agent": "project-status-engine-bootstrap",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=30):
+              pass
+          PY
+
+      - name: Mark portfolio bootstrap failed
+        if: failure()
+        continue-on-error: true
+        env:
+          STATUS_TOKEN: ${{ github.token }}
+          STATUS_STATE: failure
+          STATUS_DESCRIPTION: Portfolio bootstrap failed closed
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}",
+              data=json.dumps(
+                  {
+                      "state": os.environ["STATUS_STATE"],
+                      "context": "portfolio-bootstrap",
+                      "description": os.environ["STATUS_DESCRIPTION"],
+                  }
+              ).encode("utf-8"),
+              method="POST",
+              headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['STATUS_TOKEN']}",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "Content-Type": "application/json",
+                  "User-Agent": "project-status-engine-bootstrap",
+              },
+          )
+          with urllib.request.urlopen(request, timeout=30):
+              pass
+          PY
 
   merge-approved:
     needs: validate
