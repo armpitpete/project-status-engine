@@ -1,60 +1,118 @@
 # Project Status Engine
 
-Automatic project-status generation for GitHub projects.
+Automatic activity and completion reporting for repositories owned by `armpitpete`.
 
 ## Core rule
 
-This must not become a manual dashboard.
+This must not become a manual dashboard or an inference engine.
 
-The source of truth stays where the work already happens:
+It has two separate evidence channels:
 
-- GitHub repositories
-- open issues
-- open pull requests
-- issue and PR labels
-- recent commits and pushes
+1. **Activity and attention** come from GitHub repositories, issues, pull requests, labels, commits and push recency.
+2. **Completion percentages** come only from a validated `.project/progress.json` file committed inside each repository.
 
 Generated files are outputs. Do not maintain generated status by hand.
 
+Repository activity is never treated as completion. A busy repository may be 10% complete; a quiet repository may be finished.
+
+## Completion authority
+
+The engine looks for this path in every discovered repository:
+
+```text
+.project/progress.json
+```
+
+A missing file means **completion not configured**. It does not mean 0%.
+
+An invalid file is reported as invalid. The engine does not repair it, choose new totals, adjust weights or guess project state.
+
+### Required fields
+
+```json
+{
+  "schema_version": 1,
+  "authority": "docs/PROJECT_AUTHORITY.md",
+  "stages": [
+    {
+      "id": "drafting",
+      "label": "Drafting",
+      "completed": 36,
+      "total": 36
+    }
+  ]
+}
+```
+
+Rules:
+
+- `authority` identifies the human-approved repository record supporting the figures;
+- stage IDs must be unique lowercase identifiers;
+- `completed` and `total` must be integers;
+- `total` must be greater than zero;
+- `completed` cannot exceed `total`;
+- stage percentages are calculated automatically;
+- an overall percentage is absent by default;
+- an overall percentage is calculated only when `overall.enabled` is `true`, every stage has a weight, and weights total exactly 100.
+
+See:
+
+- `schema/progress.schema.json`
+- `examples/progress.example.json`
+
+## Three states kept separate
+
+The engine must keep these concepts distinct:
+
+| Concept | Meaning | Source |
+|---|---|---|
+| Activity | How much recent repository work is happening | GitHub events and metadata |
+| Completion | How much declared scoped work is complete | `.project/progress.json` |
+| Readiness or authority | Whether a manuscript, build, release or print package is approved | Project-specific authority records |
+
+A high completion percentage does not automatically mean ready, authoritative, releasable, print-ready or published.
+
 ## Two views, one engine
 
-The engine performs one automatic repository scan and one ranking pass, then derives two different views.
+The engine performs one automatic repository scan and one activity-ranking pass, then derives two views. Completion data is attached to the same repository records but does not affect activity ranking.
 
 ### Public surface
 
 The public GitHub Pages site shows the full discovered repository pool. The number of repositories is discovered at runtime and must not be maintained as a hard-coded portfolio count.
 
-- public repositories may show public names, links, issues and PRs;
-- private repositories remain anonymous and redacted;
-- all public counts, filters, heat-map rows, Markdown and JSON reflect the full public-safe candidate pool;
-- the public site is a harmless portfolio/activity surface, not the owner control dashboard.
+- public repositories may show public names, links, issues, PRs and validated completion data;
+- private repositories remain anonymous and completion data is redacted;
+- public counts, filters, heat-map rows, Markdown and JSON reflect the full public-safe candidate pool;
+- the public site is a portfolio/activity surface, not the owner control dashboard.
 
 ### Private owner dashboard
 
 The private owner view contains only the five busiest repositories from the same ranking result.
 
-- real repository names are preserved for both public and private repositories;
-- issue, PR and commit context is preserved;
+- real repository names are preserved for public and private repositories;
+- issue, PR, commit and completion context is preserved;
 - `Do Next` is derived only from those same five repositories and may include private work;
 - this output must be served only behind real authentication.
 
-The workflow currently generates the private view into `private-build/` on the ephemeral runner but does not upload it into the public Pages artifact. An authenticated deployment target is the next delivery layer.
+The workflow currently generates the private view into `private-build/` on the ephemeral runner but does not upload it into the public Pages artifact. An authenticated deployment target remains a separate delivery task.
 
 ## What it generates
 
 Public output in `public/`:
 
-- `index.html` — public all-repository activity surface
-- `status.json` — public-safe machine-readable status data
-- `project-status.md` — public-safe Markdown status report
-- `home-pc-tasks.md` — public tasks found through the `home-pc` label
+- `index.html` — public all-repository activity and completion surface;
+- `status.json` — public-safe machine-readable activity and completion data;
+- `project-status.md` — public-safe activity report;
+- `completion-status.md` — public-safe completion report;
+- `home-pc-tasks.md` — public tasks found through the `home-pc` label.
 
 Private build output in `private-build/`:
 
-- `index.html` — private top-five owner dashboard
-- `status.json` — unredacted top-five status data
-- `project-status.md` — private top-five Markdown report
-- `home-pc-tasks.md` — top-five owner tasks labelled `home-pc`
+- `index.html` — private top-five owner dashboard;
+- `status.json` — unredacted top-five activity and completion data;
+- `project-status.md` — private top-five activity report;
+- `completion-status.md` — private top-five completion report;
+- `home-pc-tasks.md` — top-five owner tasks labelled `home-pc`.
 
 `private-build/` is not committed and is not included in the public Pages artifact.
 
@@ -62,15 +120,15 @@ Private build output in `private-build/`:
 
 Ranking deliberately gives more weight to current work than stale backlog. The score uses:
 
-- recent commits by the configured owner
-- repository push recency
-- latest commit recency
-- recently updated pull requests
-- recently updated issues
-- open PRs and workflow labels as secondary attention signals
-- old open issue count only as a small signal
+- recent commits by the configured owner;
+- repository push recency;
+- latest commit recency;
+- recently updated pull requests;
+- recently updated issues;
+- open PRs and workflow labels as secondary attention signals;
+- old open issue count only as a small signal.
 
-The default activity window is 30 days.
+The default activity window is 30 days. Completion percentages do not affect ranking.
 
 ## Repository discovery
 
@@ -84,11 +142,10 @@ The workflow scans up to 100 owner repositories so the current complete pool can
 
 The public Pages deployment must not reveal:
 
-- private repository names
-- private repository URLs
-- private issue titles or URLs
-- private PR titles or URLs
-- private commit messages or URLs
+- private repository names or URLs;
+- private issue or PR titles and URLs;
+- private commit messages or URLs;
+- private progress stages, percentages, authority paths or validation errors.
 
 Private scan errors are also redacted.
 
@@ -98,28 +155,31 @@ The private owner dashboard is never placed under `public/` and is never include
 
 The workflow runs:
 
-- manually through Actions
-- every 15 minutes by schedule
-- after pushes to `main`
-- on pull requests for validation, without deployment
+- manually through Actions;
+- every 15 minutes for the existing activity surface;
+- after pushes to `main`;
+- on pull requests for validation, without deployment.
 
 Before generation, the workflow runs deterministic standard-library tests. It then validates that public and private output trees are separate before uploading only `public/` to GitHub Pages.
+
+A future README synchroniser may consume the completion output on a daily schedule. This repository does not yet rewrite other repositories' README files.
 
 ## Configuration
 
 Environment variables:
 
-- `STATUS_OWNER` — GitHub owner login
-- `STATUS_MAX_REPOS` — candidate repositories to inspect, workflow value `100`
-- `STATUS_MAX_ITEMS` — open issues and PRs read per repository, default `8`
-- `STATUS_PROJECT_LIMIT` — private owner dashboard size, default `5`
-- `STATUS_ACTIVITY_WINDOW_DAYS` — recent-activity window, default `30`
-- `STATUS_OUT_DIR` — public generated output directory, default `public`
-- `PRIVATE_STATUS_OUT_DIR` — private generated output directory, default `private-build`
-- `PROJECT_STATUS_TOKEN` — optional token for authenticated cross-repository discovery
-- `GITHUB_TOKEN` — API token used for public fallback and standard workflow access
+- `STATUS_OWNER` — GitHub owner login;
+- `STATUS_MAX_REPOS` — candidate repositories to inspect, workflow value `100`;
+- `STATUS_MAX_ITEMS` — open issues and PRs read per repository, default `8`;
+- `STATUS_PROJECT_LIMIT` — private owner dashboard size, default `5`;
+- `STATUS_ACTIVITY_WINDOW_DAYS` — recent-activity window, default `30`;
+- `STATUS_PROGRESS_PATH` — repository-relative completion authority path, default `.project/progress.json`;
+- `STATUS_OUT_DIR` — public generated output directory, default `public`;
+- `PRIVATE_STATUS_OUT_DIR` — private generated output directory, default `private-build`;
+- `PROJECT_STATUS_TOKEN` — optional token for authenticated cross-repository discovery;
+- `GITHUB_TOKEN` — API token used for public fallback and standard workflow access.
 
-## Labels the engine understands
+## Labels the activity engine understands
 
 The engine still runs without these labels, but they add secondary attention signals:
 
@@ -131,13 +191,18 @@ The engine still runs without these labels, but they add secondary attention sig
 - `safe-to-continue`
 - `move-to-new-chat`
 
+Labels do not affect completion percentages.
+
 ## Current scope
 
-- automatic owner-repository discovery
-- one shared scan and ranking pass
-- public all-repository privacy-safe surface
-- private unredacted top-five owner dashboard build
-- recent-activity ranking rather than stale-backlog ranking
-- archived repositories and forks ignored
-- GitHub Pages deployment for the public surface only
-- private authenticated hosting still to be attached
+- automatic owner-repository discovery;
+- one shared scan and activity-ranking pass;
+- validated stage completion from `.project/progress.json`;
+- optional explicit weighted overall completion;
+- public all-repository privacy-safe surface;
+- private unredacted top-five owner dashboard build;
+- recent-activity ranking rather than stale-backlog ranking;
+- archived repositories and forks ignored;
+- GitHub Pages deployment for the public surface only;
+- private authenticated hosting still to be attached;
+- README synchronisation still to be implemented as a separate consumer.
