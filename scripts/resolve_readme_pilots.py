@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Resolve contract-shaped pilot selectors to an ephemeral opaque allowlist.
+"""Resolve trusted README synchroniser targets to an opaque allowlist.
 
-Repository names are read only from the trusted internal dataset. The committed
-selector file contains no repository identity, and the generated allowlist stays
-inside ``internal-build/``.
+Two resolution modes are supported:
+
+* ``resolve`` keeps the original contract-shaped pilot selectors available as
+  permanent regression fixtures.
+* ``resolve_policy`` selects every repository whose internal completion record
+  is valid, allowing system-wide rollout without committing repository names.
+
+Repository names are read only from the trusted internal dataset. Generated
+allowlists contain only SHA-256 identifiers and remain under ``internal-build/``.
 """
 from __future__ import annotations
 
@@ -74,6 +80,17 @@ def load_selectors(path: Path) -> list[dict[str, Any]]:
     return result
 
 
+def load_policy(path: Path) -> dict[str, Any]:
+    document = _read_json(path, "policy_unreadable")
+    if not isinstance(document, dict) or set(document) != {"schema_version", "mode"}:
+        raise ResolutionClosed("policy_shape")
+    if document.get("schema_version") != 1:
+        raise ResolutionClosed("policy_version")
+    if document.get("mode") != "all-valid":
+        raise ResolutionClosed("policy_mode")
+    return dict(document)
+
+
 def _valid_percentage(value: Any) -> bool:
     return (
         not isinstance(value, bool)
@@ -117,8 +134,7 @@ def _validated_completion(value: Any) -> dict[str, Any] | None:
     }
 
 
-def resolve(dataset_path: Path, selector_path: Path) -> dict[str, Any]:
-    selectors = load_selectors(selector_path)
+def _load_candidates(dataset_path: Path) -> list[dict[str, Any]]:
     document = _read_json(dataset_path, "dataset_unreadable")
     if not isinstance(document, dict) or document.get("view") != "internal-owner-completion":
         raise ResolutionClosed("dataset_view")
@@ -127,6 +143,7 @@ def resolve(dataset_path: Path, selector_path: Path) -> dict[str, Any]:
         raise ResolutionClosed("dataset_repositories")
 
     candidates: list[dict[str, Any]] = []
+    seen_names: set[str] = set()
     for record in repositories:
         if not isinstance(record, dict):
             raise ResolutionClosed("dataset_record")
@@ -134,6 +151,9 @@ def resolve(dataset_path: Path, selector_path: Path) -> dict[str, Any]:
         private = record.get("private")
         if not isinstance(full_name, str) or "/" not in full_name:
             raise ResolutionClosed("dataset_repository_name")
+        if full_name in seen_names:
+            raise ResolutionClosed("dataset_duplicate_repository")
+        seen_names.add(full_name)
         if not isinstance(private, bool):
             raise ResolutionClosed("dataset_privacy")
         completion = _validated_completion(record.get("completion"))
@@ -146,6 +166,12 @@ def resolve(dataset_path: Path, selector_path: Path) -> dict[str, Any]:
                 **completion,
             }
         )
+    return candidates
+
+
+def resolve(dataset_path: Path, selector_path: Path) -> dict[str, Any]:
+    selectors = load_selectors(selector_path)
+    candidates = _load_candidates(dataset_path)
 
     hashes: list[str] = []
     used_names: set[str] = set()
@@ -168,6 +194,15 @@ def resolve(dataset_path: Path, selector_path: Path) -> dict[str, Any]:
     return {"schema_version": 1, "target_hashes": hashes}
 
 
+def resolve_policy(dataset_path: Path, policy_path: Path) -> dict[str, Any]:
+    load_policy(policy_path)
+    candidates = _load_candidates(dataset_path)
+    hashes = sorted(identifier(candidate["full_name"]) for candidate in candidates)
+    if not hashes:
+        raise ResolutionClosed("policy_no_valid_targets")
+    return {"schema_version": 1, "target_hashes": hashes}
+
+
 def write_allowlist(document: dict[str, Any], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
@@ -176,16 +211,26 @@ def write_allowlist(document: dict[str, Any], output: Path) -> None:
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, required=True)
-    parser.add_argument("--selectors", type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--selectors", type=Path)
+    mode.add_argument("--policy", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(list(argv) if argv is not None else None)
     try:
-        document = resolve(args.dataset, args.selectors)
+        if args.policy is not None:
+            document = resolve_policy(args.dataset, args.policy)
+        else:
+            document = resolve(args.dataset, args.selectors)
         write_allowlist(document, args.output)
     except ResolutionClosed as exc:
         print(json.dumps({"status": "closed", "code": exc.code}, separators=(",", ":")))
         return 1
-    print(json.dumps({"status": "resolved", "targets": len(document["target_hashes"])}, separators=(",", ":")))
+    print(
+        json.dumps(
+            {"status": "resolved", "targets": len(document["target_hashes"])},
+            separators=(",", ":"),
+        )
+    )
     return 0
 
 
