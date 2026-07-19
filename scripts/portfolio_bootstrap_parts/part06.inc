@@ -1,25 +1,3 @@
-                    "exception",
-                    {},
-                    code,
-                    detail,
-                )
-            )
-    for plan in plans:
-        try:
-            result = apply_plan(plan, client, apply=apply)
-        except (BootstrapClosed, ApiFailure) as exc:
-            code = exc.code if hasattr(exc, "code") else "closed"
-            result = Result(target_id(plan.full_name), "exception", code)
-        results.append(result)
-        if result.action in {"exception", "opened_pr", "updated_pr", "would_update", "pending_pr"}:
-            print(safe_event(result))
-    summary: dict[str, int] = {"inventory": len(repos)}
-    for result in results:
-        summary[result.action] = summary.get(result.action, 0) + 1
-    print(json.dumps({"status": "complete", **summary}, sort_keys=True, separators=(",", ":")))
-    return results
-
-
 def merge_approved(client: GitHubClient, *, apply: bool) -> list[Result]:
     results: list[Result] = []
     for repo in active_repositories(client.repositories()):
