@@ -1,6 +1,7 @@
 import base64
 import importlib.util
 import json
+import math
 from pathlib import Path
 import unittest
 
@@ -28,7 +29,10 @@ def document(*, overall=True):
 class ValidationTests(unittest.TestCase):
     def test_stage_and_weighted_overall_percentages_are_deterministic(self):
         result = completion.validate_progress(document())
-        self.assertEqual([stage["percentage"] for stage in result["stages"]], [100.0, 50.0, 0.0])
+        self.assertEqual(
+            [stage["percentage"] for stage in result["stages"]],
+            [100.0, 50.0, 0.0],
+        )
         self.assertEqual(result["overall_percentage"], 50.0)
         self.assertEqual(result["authority"], "docs/PROJECT_AUTHORITY.md")
 
@@ -40,13 +44,17 @@ class ValidationTests(unittest.TestCase):
     def test_completed_cannot_exceed_total(self):
         value = document()
         value["stages"][0]["completed"] = 37
-        with self.assertRaisesRegex(completion.ProgressValidationError, "must not exceed total"):
+        with self.assertRaisesRegex(
+            completion.ProgressValidationError, "must not exceed total"
+        ):
             completion.validate_progress(value)
 
     def test_enabled_overall_requires_weights_totaling_100(self):
         value = document()
         value["stages"][0]["weight"] = 20
-        with self.assertRaisesRegex(completion.ProgressValidationError, "weights must total 100"):
+        with self.assertRaisesRegex(
+            completion.ProgressValidationError, "weights must total 100"
+        ):
             completion.validate_progress(value)
 
     def test_authority_is_required(self):
@@ -55,12 +63,39 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(completion.ProgressValidationError, "authority"):
             completion.validate_progress(value)
 
+    def test_unknown_fields_are_rejected_to_match_published_schema(self):
+        value = document()
+        value["guessed_readiness"] = "print-ready"
+        with self.assertRaisesRegex(
+            completion.ProgressValidationError, "unknown fields"
+        ):
+            completion.validate_progress(value)
+
+        stage_value = document()
+        stage_value["stages"][0]["status"] = "done"
+        with self.assertRaisesRegex(
+            completion.ProgressValidationError, "unknown fields"
+        ):
+            completion.validate_progress(stage_value)
+
+    def test_weights_must_be_finite(self):
+        value = document()
+        value["stages"][0]["weight"] = math.nan
+        with self.assertRaisesRegex(completion.ProgressValidationError, "finite"):
+            completion.validate_progress(value)
+
 
 class FetchTests(unittest.TestCase):
     def test_decodes_github_contents_payload(self):
         raw = json.dumps(document()).encode("utf-8")
-        payload = {"type": "file", "encoding": "base64", "content": base64.b64encode(raw).decode("ascii")}
-        result = completion.validate_progress(completion.decode_contents_payload(payload))
+        payload = {
+            "type": "file",
+            "encoding": "base64",
+            "content": base64.b64encode(raw).decode("ascii"),
+        }
+        result = completion.validate_progress(
+            completion.decode_contents_payload(payload)
+        )
         self.assertEqual(result["state"], "valid")
 
     def test_missing_file_is_not_configured_not_an_error(self):
@@ -73,11 +108,29 @@ class FetchTests(unittest.TestCase):
 
     def test_invalid_document_is_reported(self):
         raw = json.dumps({"schema_version": 1}).encode("utf-8")
-        payload = {"type": "file", "encoding": "base64", "content": base64.b64encode(raw).decode("ascii")}
+        payload = {
+            "type": "file",
+            "encoding": "base64",
+            "content": base64.b64encode(raw).decode("ascii"),
+        }
 
-        result, error = completion.fetch_repository_progress("owner/repo", lambda path, query: payload)
+        result, error = completion.fetch_repository_progress(
+            "owner/repo", lambda path, query: payload
+        )
         self.assertEqual(result["state"], "invalid")
         self.assertIn("invalid .project/progress.json", error)
+
+    def test_non_standard_json_constants_are_rejected(self):
+        raw = b'{"schema_version":1,"authority":"docs/A.md","stages":[],"weight":NaN}'
+        payload = {
+            "type": "file",
+            "encoding": "base64",
+            "content": base64.b64encode(raw).decode("ascii"),
+        }
+        with self.assertRaisesRegex(
+            completion.ProgressValidationError, "non-standard JSON constant"
+        ):
+            completion.decode_contents_payload(payload)
 
 
 class PrivacyAndRenderingTests(unittest.TestCase):
