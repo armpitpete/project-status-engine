@@ -177,9 +177,9 @@ The status workflow runs:
 - after pushes to `main`;
 - on pull requests for validation, without deployment.
 
-Before generation, the status workflow runs deterministic standard-library tests. It then generates all three outputs, validates their separation, verifies the three pilot completion contracts, scans public files for private pilot identity and completion details, and uploads only `public/` to GitHub Pages.
+Before generation, the status workflow runs deterministic standard-library tests. It then generates all three outputs, validates their separation, verifies the permanent three-pilot regression contracts, scans public files for private pilot identity and completion details, and uploads only `public/` to GitHub Pages.
 
-The separate README synchroniser workflow runs daily at 05:17 in `Europe/London` and can also be invoked manually. It consumes `internal-build/completion-status.json`, resolves exactly three contract-selected pilots, updates only explicit marker blocks on `automation/readme-sync`, and opens or updates ready-for-review pull requests. Pull-request and ordinary push events run validation only and perform no cross-repository write.
+The separate README synchroniser workflow runs daily at 05:17 in `Europe/London` and can also be invoked manually. It consumes `internal-build/completion-status.json`, selects every valid completion contract through the identity-free `all-valid` policy, updates only explicit marker blocks on `automation/readme-sync`, and opens or updates ready-for-review pull requests. Pull-request and ordinary push events run validation only and perform no cross-repository write.
 
 The complete synchroniser contract is recorded in `docs/README_SYNCHRONISER.md`.
 
@@ -197,7 +197,7 @@ Environment variables:
 - `PRIVATE_STATUS_OUT_DIR` — private generated output directory, default `private-build`;
 - `INTERNAL_STATUS_OUT_DIR` — trusted full-owner completion output directory, default `internal-build`;
 - `PROJECT_STATUS_TOKEN` — optional token for authenticated cross-repository discovery;
-- `README_SYNC_TOKEN` — preferred dedicated token for pilot README branch and pull-request writes;
+- `README_SYNC_TOKEN` — dedicated token for owner-wide README branch and pull-request writes;
 - `GITHUB_TOKEN` — API token used for public fallback and standard workflow access.
 
 ## Labels the activity engine understands
@@ -224,7 +224,7 @@ Labels do not affect completion percentages.
 - private unredacted top-five owner dashboard build;
 - trusted unredacted full-owner completion dataset;
 - explicit public-leakage validation;
-- daily authority-backed README synchronisation for three contract-selected pilots;
+- daily authority-backed README synchronisation for every valid project contract;
 - recent-activity ranking rather than stale-backlog ranking;
 - archived repositories and forks ignored;
 - GitHub Pages deployment for the public surface only;
