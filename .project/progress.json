@@ -2,14 +2,14 @@
   "schema_version": 1,
   "authority": "README.md",
   "project_type": "software",
-  "note": "Pilot self-reporting contract. Completed stages are already implemented and documented on main. Future delivery stages remain zero until separately implemented and verified. No overall percentage is enabled because milestone weights have not been approved.",
+  "note": "Pilot self-reporting contract. Activity reporting, completion authority and the bounded three-pilot README synchroniser are implemented and verified. Authenticated private-dashboard delivery remains a separate future stage. No overall percentage is enabled because milestone weights have not been approved.",
   "stages": [
     {
       "id": "activity_dashboard",
       "label": "Activity ranking and public/private dashboard split",
       "completed": 1,
       "total": 1,
-      "evidence": "README.md#two-views-one-engine"
+      "evidence": "README.md#three-outputs-one-engine"
     },
     {
       "id": "completion_authority_engine",
@@ -28,9 +28,9 @@
     {
       "id": "daily_readme_synchroniser",
       "label": "Daily authority-backed README synchroniser",
-      "completed": 0,
+      "completed": 1,
       "total": 1,
-      "evidence": "README.md#how-it-runs"
+      "evidence": "docs/README_SYNCHRONISER.md"
     }
   ],
   "overall": {
