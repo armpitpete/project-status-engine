@@ -125,6 +125,25 @@ A repository receives an exception issue only when evidence is genuinely insuffi
 
 Logs contain only opaque target digests, fixed action names, fixed exception codes and aggregate counts. Private repository identity and evidence do not enter public workflow logs.
 
+## Run report and failure boundary
+
+Every applied run writes one aggregate machine-readable report to the automation branch:
+
+```text
+automation/portfolio-bootstrap-report
+```
+
+The report file is `portfolio-bootstrap-report.json`. It records only:
+
+- the triggering engine commit;
+- inventory size;
+- action counts;
+- exception and infrastructure error-code counts.
+
+It contains no repository names, URLs, authority paths, evidence text or opaque target identifiers. The branch is automation state and does not open a pull request.
+
+Evidence exceptions are a valid completed-run result when their repository issue was successfully created or updated. API, authentication, inventory, branch, commit, pull-request, issue-reporting or aggregate-report failures are infrastructure failures. Any infrastructure failure makes the workflow fail closed and prevents a successful `portfolio-bootstrap` commit status. An empty active inventory also fails closed.
+
 ## One approval gate
 
 The normal `apply` mode inventories the portfolio and opens or updates every required bootstrap PR.
