@@ -51,11 +51,13 @@ For each pilot, the synchroniser:
 3. consumes the stage percentages already present in the internal dataset;
 4. prepares the replacement marker block;
 5. does nothing when the default-branch README already matches;
-6. resets or creates only `automation/readme-sync` from the default-branch head;
-7. commits only `README.md` on that automation branch;
-8. opens or updates one ready-for-review pull request.
+6. reads an existing synchroniser branch when one reviewable PR is already open;
+7. creates no branch update or commit when that open PR already contains the desired README;
+8. otherwise resets or creates only `automation/readme-sync` from the default-branch head;
+9. commits only `README.md` on that automation branch;
+10. opens or updates one ready-for-review pull request.
 
-The synchroniser never writes directly to the default branch.
+The synchroniser never writes directly to the default branch. Repeated daily runs with unchanged authority do not manufacture replacement commits on an already-current open pull request.
 
 ## Fail-closed conditions
 
@@ -68,6 +70,7 @@ The complete pilot batch closes before writing when:
 - stages or supplied percentages are malformed;
 - README markers are absent, duplicated or reversed;
 - more than one open synchroniser pull request exists for a target;
+- an open synchroniser pull request has no readable automation branch;
 - repository or API state cannot be read safely.
 
 ## Privacy and credential controls
