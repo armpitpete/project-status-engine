@@ -16,7 +16,12 @@ A repository enters the inventory when all of the following are true:
 - it is not disabled;
 - it has a default branch recorded by GitHub.
 
-The inventory is resolved through the authenticated GitHub API on every run. Repository identities are not committed to this repository.
+The inventory is resolved through the GitHub API on every run by taking the union of:
+
+- repositories visible through the authenticated owner token, including private repositories;
+- all public repositories returned for the configured owner.
+
+Repository identities are not committed to this repository. The workflow also enforces a current minimum active-portfolio count. This is a visibility guard, not an allowlist: repositories may be added automatically, but a token that suddenly sees only a subset cannot report a successful portfolio rollout.
 
 ## Project classification
 
@@ -121,7 +126,19 @@ An open non-bootstrap PR that already changes `.project/progress.json` is recogn
 
 Already-correct repositories are silent.
 
-A repository receives an exception issue only when evidence is genuinely insufficient, contradictory, unreadable or structurally unsafe. The issue is updated idempotently and closed automatically after the repository becomes safely bootstrappable.
+When evidence is genuinely insufficient, contradictory, unreadable or structurally unsafe, the controller writes one machine-readable exception record to the repository branch:
+
+```text
+automation/project-status-bootstrap-exception
+```
+
+The record path is:
+
+```text
+.project/bootstrap-exception.json
+```
+
+The branch does not open a pull request and does not alter the default branch. It uses repository Contents permission only; Issues permission is not required. The record contains the fixed exception code, bounded detail, source commit and project classification. It contains no invented completion value. When the repository becomes safely bootstrappable, already onboarded or covered by a pending onboarding PR, the controller deletes the exception branch automatically.
 
 Logs contain only opaque target digests, fixed action names, fixed exception codes and aggregate counts. Private repository identity and evidence do not enter public workflow logs.
 
@@ -136,13 +153,14 @@ automation/portfolio-bootstrap-report
 The report file is `portfolio-bootstrap-report.json`. It records only:
 
 - the triggering engine commit;
-- inventory size;
+- authenticated, public and union inventory counts;
+- the minimum portfolio visibility guard;
 - action counts;
 - exception and infrastructure error-code counts.
 
 It contains no repository names, URLs, authority paths, evidence text or opaque target identifiers. The branch is automation state and does not open a pull request.
 
-Evidence exceptions are a valid completed-run result when their repository issue was successfully created or updated. API, authentication, inventory, branch, commit, pull-request, issue-reporting or aggregate-report failures are infrastructure failures. Any infrastructure failure makes the workflow fail closed and prevents a successful `portfolio-bootstrap` commit status. An empty active inventory also fails closed.
+Evidence exceptions are a valid completed-run result when their repository exception branch was successfully created or updated. API, authentication, inventory, branch, commit, pull-request, exception-reporting or aggregate-report failures are infrastructure failures. Any infrastructure failure makes the workflow fail closed and prevents a successful `portfolio-bootstrap` commit status. An empty inventory or an inventory below the configured active-portfolio minimum also fails closed before repository planning begins.
 
 ## One approval gate
 
