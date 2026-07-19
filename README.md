@@ -72,9 +72,9 @@ The engine must keep these concepts distinct:
 
 A high completion percentage does not automatically mean ready, authoritative, releasable, print-ready or published.
 
-## Two views, one engine
+## Three outputs, one engine
 
-The engine performs one automatic repository scan and one activity-ranking pass, then derives two views. Completion data is attached to the same repository records but does not affect activity ranking.
+The engine performs one automatic repository scan and one activity-ranking pass, then derives two dashboard views and one trusted internal dataset. Completion data does not affect activity ranking.
 
 ### Public surface
 
@@ -96,6 +96,19 @@ The private owner view contains only the five busiest repositories from the same
 
 The workflow currently generates the private view into `private-build/` on the ephemeral runner but does not upload it into the public Pages artifact. An authenticated deployment target remains a separate delivery task.
 
+### Internal full-owner completion dataset
+
+The trusted internal dataset contains every discovered repository, including private repository identity and validated completion data. It is deliberately minimal:
+
+- repository name and full name;
+- privacy flag;
+- repository URL;
+- validated completion authority and calculated stages.
+
+It excludes issues, pull requests, commits, activity details and dashboard actions. The future README synchroniser will consume this dataset inside the trusted workflow before runner cleanup.
+
+The dataset is written to `internal-build/completion-status.json`. It is not a dashboard, is never placed under `public/`, and is never included in the GitHub Pages artifact.
+
 ## What it generates
 
 Public output in `public/`:
@@ -114,7 +127,11 @@ Private build output in `private-build/`:
 - `completion-status.md` — private top-five completion report;
 - `home-pc-tasks.md` — top-five owner tasks labelled `home-pc`.
 
-`private-build/` is not committed and is not included in the public Pages artifact.
+Trusted internal output in `internal-build/`:
+
+- `completion-status.json` — unredacted completion data for every discovered repository, intended for internal machine consumers.
+
+`private-build/` and `internal-build/` are not committed and are not included in the public Pages artifact.
 
 ## Activity ranking
 
@@ -149,7 +166,7 @@ The public Pages deployment must not reveal:
 
 Private scan errors are also redacted.
 
-The private owner dashboard is never placed under `public/` and is never included in the GitHub Pages artifact.
+The workflow tests public output for private-data leakage. Only `public/` is passed to `actions/upload-pages-artifact`; neither `private-build/` nor `internal-build/` is uploaded.
 
 ## How it runs
 
@@ -160,9 +177,9 @@ The workflow runs:
 - after pushes to `main`;
 - on pull requests for validation, without deployment.
 
-Before generation, the workflow runs deterministic standard-library tests. It then validates that public and private output trees are separate before uploading only `public/` to GitHub Pages.
+Before generation, the workflow runs deterministic standard-library tests. It then generates all three outputs, validates their separation, verifies the three pilot completion contracts, scans public files for private pilot identity and completion details, and uploads only `public/` to GitHub Pages.
 
-A future README synchroniser may consume the completion output on a daily schedule. This repository does not yet rewrite other repositories' README files.
+A future README synchroniser may consume `internal-build/completion-status.json` on a daily schedule. This repository does not yet rewrite other repositories' README files.
 
 ## Configuration
 
@@ -176,6 +193,7 @@ Environment variables:
 - `STATUS_PROGRESS_PATH` — repository-relative completion authority path, default `.project/progress.json`;
 - `STATUS_OUT_DIR` — public generated output directory, default `public`;
 - `PRIVATE_STATUS_OUT_DIR` — private generated output directory, default `private-build`;
+- `INTERNAL_STATUS_OUT_DIR` — trusted full-owner completion output directory, default `internal-build`;
 - `PROJECT_STATUS_TOKEN` — optional token for authenticated cross-repository discovery;
 - `GITHUB_TOKEN` — API token used for public fallback and standard workflow access.
 
@@ -201,6 +219,8 @@ Labels do not affect completion percentages.
 - optional explicit weighted overall completion;
 - public all-repository privacy-safe surface;
 - private unredacted top-five owner dashboard build;
+- trusted unredacted full-owner completion dataset;
+- explicit public-leakage validation;
 - recent-activity ranking rather than stale-backlog ranking;
 - archived repositories and forks ignored;
 - GitHub Pages deployment for the public surface only;
