@@ -16,7 +16,7 @@
     {
       "id": "pilot-02",
       "project_type": "language-canon",
-      "authority": "20_Language/LANGUAGE_ARCHITECTURE.md",
+      "authority": "20_Language/D-08_IMPLEMENTATION_SUPERSESSION_RECORD.md",
       "private": true,
       "stage_ids": [
         "core_grammar_decisions"
