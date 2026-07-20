@@ -1,15 +1,39 @@
 def merge_approved(client: GitHubClient, *, apply: bool) -> list[Result]:
     results: list[Result] = []
+    approved_specs = {
+        BOOTSTRAP_BRANCH: {
+            "title": BOOTSTRAP_PR_TITLE,
+            "action": "update",
+            "allowed_paths": {README_PATH, PROGRESS_PATH},
+        },
+        README_REPAIR_BRANCH: {
+            "title": README_REPAIR_PR_TITLE,
+            "action": "readme_repair",
+            "allowed_paths": {README_PATH},
+        },
+    }
     for repo in active_repositories(client.repositories()):
         full_name = repo["full_name"]
         base = repo["default_branch"]
         prs = client.open_prs(full_name, base)
-        pr = next((item for item in prs if item.get("head", {}).get("ref") == BOOTSTRAP_BRANCH), None)
-        if pr is None:
+        candidates = [
+            item
+            for item in prs
+            if item.get("head", {}).get("ref") in approved_specs
+        ]
+        if not candidates:
             continue
+        if len(candidates) != 1:
+            results.append(
+                Result(target_id(full_name), "exception", "multiple_approved_automation_prs")
+            )
+            continue
+        pr = candidates[0]
+        branch = pr.get("head", {}).get("ref")
+        spec = approved_specs.get(branch)
         number = pr.get("number")
         head_sha = pr.get("head", {}).get("sha")
-        if pr.get("title") != BOOTSTRAP_PR_TITLE or pr.get("draft"):
+        if spec is None or pr.get("title") != spec["title"] or pr.get("draft"):
             results.append(Result(target_id(full_name), "exception", "bootstrap_pr_not_approved_shape"))
             continue
         if not isinstance(number, int) or not isinstance(head_sha, str):
@@ -17,7 +41,7 @@ def merge_approved(client: GitHubClient, *, apply: bool) -> list[Result]:
             continue
         files = client.pr_files(full_name, number)
         filenames = {item.get("filename") for item in files}
-        if not filenames or not filenames.issubset({README_PATH, PROGRESS_PATH}):
+        if not filenames or not filenames.issubset(spec["allowed_paths"]):
             results.append(Result(target_id(full_name), "exception", "bootstrap_pr_scope"))
             continue
         try:
@@ -26,7 +50,7 @@ def merge_approved(client: GitHubClient, *, apply: bool) -> list[Result]:
             code = exc.code if hasattr(exc, "code") else "bootstrap_pr_revalidation"
             results.append(Result(target_id(full_name), "exception", code))
             continue
-        if expected.action != "update" or filenames != set(expected.files):
+        if expected.action != spec["action"] or filenames != set(expected.files):
             results.append(Result(target_id(full_name), "exception", "bootstrap_pr_stale"))
             continue
         exact = True

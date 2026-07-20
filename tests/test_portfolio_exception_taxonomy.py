@@ -215,7 +215,7 @@ class PortfolioExceptionTaxonomyTests(unittest.TestCase):
             "topics": [],
         }
         plan = subject.plan_repository(repo, PlanningClient(contract=valid_contract()))
-        self.assertEqual(plan.action, "update")
+        self.assertEqual(plan.action, "readme_repair")
         self.assertEqual(set(plan.files), {subject.README_PATH})
         self.assertIsNone(plan.exception_code)
 
