@@ -94,7 +94,7 @@ The private owner view contains only the five busiest repositories from the same
 - `Do Next` is derived only from those same five repositories and may include private work;
 - this output must be served only behind real authentication.
 
-The workflow currently generates the private view into `private-build/` on the ephemeral runner but does not upload it into the public Pages artifact. An authenticated deployment target remains a separate delivery task.
+The workflow generates the private view into `private-build/` without placing it in the public Pages artifact. On non-pull-request runs with private deployment enabled, it deploys that directory through a dedicated Ed25519 credential and pinned host key to `https://command.vaelinya.uk/private/project-status-engine/`, then verifies that anonymous access remains blocked by Cloudflare Access. Main run `29748153645` on merge commit `01c2a7ec1913a0119c4a49f1d3c4376325634bb6` passed generation, separation, deployment and anonymous-access validation; authenticated owner review on 2026-07-20 confirmed the live top-five dashboard, current `Do Next` items and private completion/authority sections.
 
 ### Internal full-owner completion dataset
 
@@ -228,7 +228,7 @@ Labels do not affect completion percentages.
 - recent-activity ranking rather than stale-backlog ranking;
 - archived repositories and forks ignored;
 - GitHub Pages deployment for the public surface only;
-- private authenticated hosting still to be attached.
+- authenticated private hosting at `https://command.vaelinya.uk/private/project-status-engine/` behind Cloudflare Access.
 
 <!-- AUTO:PROJECT-COMPLETION:START -->
 ## Completion
@@ -239,7 +239,7 @@ _Generated from validated project authority by `project-status-engine`. Reposito
 |---|---:|
 | Activity ranking and public/private dashboard split | `1/1` — **100.0%** |
 | Authority-backed completion calculation | `1/1` — **100.0%** |
-| Authenticated private dashboard delivery | `0/1` — **0.0%** |
+| Authenticated private dashboard delivery | `1/1` — **100.0%** |
 | Daily authority-backed README synchroniser | `1/1` — **100.0%** |
 
 Authority: `README.md`
