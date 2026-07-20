@@ -38,34 +38,53 @@ jobs:
           import os
           from pathlib import Path
           import sys
-          sys.path.insert(0, "scripts")
-          import completion_status
-          import resolve_readme_pilots as resolver
-          data_path = Path("internal-build/completion-status.json")
-          selectors_path = Path("config/readme-sync-pilots.json")
-          data = json.loads(data_path.read_text(encoding="utf-8"))
-          selectors = resolver.load_selectors(selectors_path)
-          resolved = resolver.resolve(data_path, selectors_path)
-          records = {
-              hashlib.sha256(item["full_name"].encode("utf-8")).hexdigest(): item
-              for item in data["repositories"]
-          }
-          ids = {
-              selector["id"]: target_hash
-              for selector, target_hash in zip(selectors, resolved["target_hashes"], strict=True)
-          }
-          local = completion_status.validate_progress(
-              json.loads(Path(".project/progress.json").read_text(encoding="utf-8"))
+
+          result = {"event": os.environ.get("GITHUB_EVENT_NAME")}
+          try:
+              sys.path.insert(0, "scripts")
+              import completion_status
+              import resolve_readme_pilots as resolver
+
+              data_path = Path("internal-build/completion-status.json")
+              selectors_path = Path("config/readme-sync-pilots.json")
+              data = json.loads(data_path.read_text(encoding="utf-8"))
+              result["repository_count"] = len(data.get("repositories", []))
+              selectors = resolver.load_selectors(selectors_path)
+              result["selector_ids"] = [item["id"] for item in selectors]
+              resolved = resolver.resolve(data_path, selectors_path)
+              records = {
+                  hashlib.sha256(item["full_name"].encode("utf-8")).hexdigest(): item
+                  for item in data["repositories"]
+              }
+              ids = {
+                  selector["id"]: target_hash
+                  for selector, target_hash in zip(
+                      selectors,
+                      resolved["target_hashes"],
+                      strict=True,
+                  )
+              }
+              result["pilot_03_hash_present"] = ids["pilot-03"] in records
+              local = completion_status.validate_progress(
+                  json.loads(Path(".project/progress.json").read_text(encoding="utf-8"))
+              )
+              live = records[ids["pilot-03"]]["completion"]
+              result["local"] = {
+                  stage["id"]: stage["percentage"] for stage in local["stages"]
+              }
+              result["live"] = {
+                  stage["id"]: stage["percentage"] for stage in live["stages"]
+              }
+              result["state"] = live.get("state")
+              result["overall"] = live.get("overall_percentage")
+          except Exception as exc:
+              result["error_type"] = type(exc).__name__
+              result["error_code"] = getattr(exc, "code", str(exc))
+
+          Path("stage-transition.json").write_text(
+              json.dumps(result, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
           )
-          live = records[ids["pilot-03"]]["completion"]
-          result = {
-              "event": os.environ.get("GITHUB_EVENT_NAME"),
-              "local": {stage["id"]: stage["percentage"] for stage in local["stages"]},
-              "live": {stage["id"]: stage["percentage"] for stage in live["stages"]},
-              "state": live["state"],
-              "overall": live["overall_percentage"],
-          }
-          Path("stage-transition.json").write_text(json.dumps(result, indent=2) + "\n")
           PY
       - uses: actions/upload-artifact@v4
         with:
