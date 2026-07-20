@@ -1,80 +1,64 @@
-name: Diagnose README pilot selectors
+name: Reconcile README pilot selector drift
 
 on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
+  reconcile:
+    if: github.actor == 'armpitpete'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repair branch
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          ref: fix/live-pilot-selector-drift
+          fetch-depth: 0
 
-      - name: Generate current internal completion data
-        env:
-          PROJECT_STATUS_TOKEN: ${{ secrets.PROJECT_STATUS_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          STATUS_OWNER: armpitpete
-          STATUS_MAX_REPOS: "100"
-          STATUS_MAX_ITEMS: "8"
-          STATUS_PROJECT_LIMIT: "5"
-          STATUS_ACTIVITY_WINDOW_DAYS: "30"
-          STATUS_PROGRESS_PATH: .project/progress.json
-          STATUS_OUT_DIR: public
-          PRIVATE_STATUS_OUT_DIR: private-build
-          INTERNAL_STATUS_OUT_DIR: internal-build
-        run: python scripts/generate_status.py
-
-      - name: Record anonymous selector match counts
+      - name: Apply bounded authority reconciliation
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
-          import sys
 
-          sys.path.insert(0, "scripts")
-          import resolve_readme_pilots as resolver
+          config_path = Path("config/readme-sync-pilots.json")
+          config = json.loads(config_path.read_text(encoding="utf-8"))
+          target = next(item for item in config["targets"] if item["id"] == "pilot-02")
+          old_authority = "20_Language/LANGUAGE_ARCHITECTURE.md"
+          new_authority = "20_Language/D-08_IMPLEMENTATION_SUPERSESSION_RECORD.md"
+          if target["authority"] != old_authority:
+              raise SystemExit(f"unexpected pilot-02 authority: {target['authority']}")
+          target["authority"] = new_authority
+          config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
-          selectors = resolver.load_selectors(Path("config/readme-sync-pilots.json"))
-          candidates = resolver._load_candidates(Path("internal-build/completion-status.json"))
-          results = []
+          workflow_path = Path(".github/workflows/status.yml")
+          workflow = workflow_path.read_text(encoding="utf-8")
+          old_percentage = '"core_grammar_decisions": 70.0,'
+          new_percentage = '"core_grammar_decisions": 80.0,'
+          if workflow.count(old_percentage) != 1:
+              raise SystemExit("expected exactly one stale pilot-02 percentage")
+          workflow_path.write_text(
+              workflow.replace(old_percentage, new_percentage, 1),
+              encoding="utf-8",
+          )
 
-          for selector in selectors:
-              matches = [
-                  candidate
-                  for candidate in candidates
-                  if candidate["private"] is selector["private"]
-                  and candidate["project_type"] == selector["project_type"]
-                  and candidate["authority"] == selector["authority"]
-                  and candidate["stage_ids"] == selector["stage_ids"]
-              ]
-              results.append(
-                  {
-                      "selector_id": selector["id"],
-                      "match_count": len(matches),
-                  }
-              )
-
-          output = Path("selector-match-counts.json")
-          output.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
-          print(output.read_text(encoding="utf-8"))
+          Path(".github/workflows/diagnose-readme-pilot-selectors.yml").unlink()
           PY
 
-      - name: Upload anonymous selector diagnostic
-        uses: actions/upload-artifact@v4
-        with:
-          name: selector-match-counts
-          path: selector-match-counts.json
-          if-no-files-found: error
-          retention-days: 1
+      - name: Verify bounded diff
+        run: |
+          git diff --check
+          git diff -- config/readme-sync-pilots.json .github/workflows/status.yml
+          test ! -e .github/workflows/diagnose-readme-pilot-selectors.yml
+
+      - name: Commit reconciliation
+        run: |
+          git config user.name "project-status-engine-automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add config/readme-sync-pilots.json .github/workflows/status.yml .github/workflows/diagnose-readme-pilot-selectors.yml
+          git commit -m "Reconcile Vaelinya pilot selector authority"
+          git push origin HEAD:fix/live-pilot-selector-drift
