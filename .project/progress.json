@@ -2,7 +2,7 @@
   "schema_version": 1,
   "authority": "README.md",
   "project_type": "software",
-  "note": "Pilot self-reporting contract. Activity reporting, completion authority and the bounded three-pilot README synchroniser are implemented and verified. Authenticated private-dashboard delivery remains a separate future stage. No overall percentage is enabled because milestone weights have not been approved.",
+  "note": "Pilot self-reporting contract. Activity reporting, completion authority, authenticated private-dashboard delivery and the owner-wide README synchroniser are implemented and verified. No overall percentage is enabled because milestone weights have not been approved.",
   "stages": [
     {
       "id": "activity_dashboard",
@@ -21,7 +21,7 @@
     {
       "id": "private_authenticated_delivery",
       "label": "Authenticated private dashboard delivery",
-      "completed": 0,
+      "completed": 1,
       "total": 1,
       "evidence": "README.md#private-owner-dashboard"
     },
