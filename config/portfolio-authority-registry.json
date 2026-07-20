@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "registry_type": "portfolio-authority-policy",
+  "repository_identity_mode": "dynamic-owner-inventory",
+  "primary_exception_codes": [
+    "missing_completion_contract",
+    "missing_authoritative_source",
+    "missing_readme_marker",
+    "ambiguous_project_type",
+    "contradictory_evidence",
+    "no_completion_evidence",
+    "inactive_repository_candidate"
+  ],
+  "classification_priority": [
+    "inactive_repository_candidate",
+    "contradictory_evidence",
+    "missing_completion_contract",
+    "missing_readme_marker",
+    "ambiguous_project_type",
+    "missing_authoritative_source",
+    "no_completion_evidence"
+  ],
+  "ambiguous_project_types": [
+    "mixed",
+    "unknown"
+  ],
+  "source_code_groups": {
+    "contradictory_evidence": [
+      "contradictory_counts",
+      "contradictory_percentage",
+      "contradictory_stage",
+      "progress_stage_range",
+      "progress_overall_weight_total"
+    ],
+    "missing_completion_contract": [
+      "progress_json",
+      "progress_shape",
+      "progress_unknown_field",
+      "progress_version",
+      "progress_authority",
+      "progress_stages",
+      "progress_stage_shape",
+      "progress_stage_unknown_field",
+      "progress_stage_fields",
+      "progress_stage_id",
+      "progress_stage_duplicate",
+      "progress_stage_label",
+      "progress_stage_completed",
+      "progress_stage_total",
+      "progress_stage_weight",
+      "progress_overall_shape",
+      "progress_overall_enabled",
+      "progress_overall_missing_weight"
+    ],
+    "missing_readme_marker": [
+      "readme_not_utf8",
+      "readme_markers",
+      "readme_marker_order",
+      "human_readme_bytes_changed"
+    ]
+  }
+}
