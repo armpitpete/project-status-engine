@@ -1,6 +1,9 @@
 name: Apply private dashboard acceptance authority
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - authority/complete-private-dashboard-delivery
