@@ -1,17 +1,16 @@
 {
   "actions": {
     "exception": 42,
-    "opened_pr": 5,
-    "unchanged": 3
+    "unchanged": 8
   },
   "exceptions": {
-    "ambiguous_project_type": 0,
+    "ambiguous_project_type": 2,
     "contradictory_evidence": 0,
     "inactive_repository_candidate": 0,
     "missing_authoritative_source": 0,
     "missing_completion_contract": 0,
     "missing_readme_marker": 0,
-    "no_completion_evidence": 42
+    "no_completion_evidence": 40
   },
   "failures": {},
   "inventory": 50,
@@ -24,6 +23,6 @@
   "mode": "apply",
   "registry_schema_version": 1,
   "schema_version": 2,
-  "source_sha": "431e5831c6ad1f7711d188e10fc66558ff56824c",
+  "source_sha": "c34b4283fa81578ba12923097c1935f7ff032ac3",
   "status": "complete"
 }
