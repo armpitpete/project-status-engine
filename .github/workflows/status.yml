@@ -62,12 +62,14 @@ jobs:
           test -f private-build/status.json
           test -f private-build/completion-status.md
           test -f private-build/authority-exceptions.md
+          test -f private-build/authority-resolution-templates.md
           test -f internal-build/completion-status.json
           test ! -e public/private-build
           test ! -e public/private
           test ! -e public/internal-build
           test ! -e public/completion-status.json
           test ! -e public/authority-exceptions.md
+          test ! -e public/authority-resolution-templates.md
           python - <<'PY'
           import hashlib
           import json
@@ -158,6 +160,11 @@ jobs:
           )
           assert internal["authority_exception_summary"]["total"] == len(expected_queue)
           assert private["authority_exception_summary"]["total"] == len(expected_queue)
+          for item in internal["authority_exception_queue"]:
+              assert item["resolution_lane"]
+              assert item["required_action"]
+              assert isinstance(item["owner_decision_required"], bool)
+          assert internal["authority_exception_summary"] == private["authority_exception_summary"]
 
           assert "authority_exception_queue" not in public
           assert "authority_exception_summary" not in public
@@ -201,9 +208,37 @@ jobs:
 
           print(
               "Verified three contract-selected pilots, owner-wide private exception queue, "
-              "and structural public output separation."
+              "resolution lanes, and structural public output separation."
           )
           PY
+
+      - name: Prepare dedicated private deployment credential
+        if: github.event_name != 'pull_request' && vars.PRIVATE_STATUS_DEPLOY_ENABLED == 'true'
+        env:
+          PRIVATE_STATUS_DEPLOY_KEY: ${{ secrets.PRIVATE_STATUS_DEPLOY_KEY }}
+          PRIVATE_STATUS_KNOWN_HOSTS: ${{ secrets.PRIVATE_STATUS_KNOWN_HOSTS }}
+        run: |
+          test -n "$PRIVATE_STATUS_DEPLOY_KEY"
+          test -n "$PRIVATE_STATUS_KNOWN_HOSTS"
+          install -d -m 700 "${RUNNER_TEMP}/private-status-ssh"
+          printf '%s\n' "$PRIVATE_STATUS_DEPLOY_KEY" > "${RUNNER_TEMP}/private-status-ssh/id_ed25519"
+          printf '%s\n' "$PRIVATE_STATUS_KNOWN_HOSTS" > "${RUNNER_TEMP}/private-status-ssh/known_hosts"
+          chmod 600 "${RUNNER_TEMP}/private-status-ssh/id_ed25519" "${RUNNER_TEMP}/private-status-ssh/known_hosts"
+
+      - name: Deploy private owner dashboard to pinned Oracle target
+        if: github.event_name != 'pull_request' && vars.PRIVATE_STATUS_DEPLOY_ENABLED == 'true'
+        env:
+          PRIVATE_STATUS_DEPLOY_HOST: server.vaelinya.uk
+          PRIVATE_STATUS_DEPLOY_USER: vaelinya
+          PRIVATE_STATUS_DEPLOY_TARGET: /home/vaelinya/public_html/private/project-status-engine/
+          PRIVATE_STATUS_SOURCE_DIR: private-build
+          PRIVATE_STATUS_SSH_KEY_FILE: ${{ runner.temp }}/private-status-ssh/id_ed25519
+          PRIVATE_STATUS_KNOWN_HOSTS_FILE: ${{ runner.temp }}/private-status-ssh/known_hosts
+        run: bash scripts/deploy_private_status.sh
+
+      - name: Verify anonymous access remains blocked
+        if: github.event_name != 'pull_request' && vars.PRIVATE_STATUS_DEPLOY_ENABLED == 'true'
+        run: python scripts/verify_private_access.py https://command.vaelinya.uk/private/project-status-engine/
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
