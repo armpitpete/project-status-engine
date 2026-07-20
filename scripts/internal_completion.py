@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Build the unredacted full-owner completion and authority-exception dataset.
-
-This output is for trusted internal consumers such as the README synchroniser.
-It is never a public or dashboard artifact.
-"""
+"""Build the trusted full-owner completion and authority-exception dataset."""
 from __future__ import annotations
 
 import copy
@@ -28,7 +24,9 @@ def _repository_record(project: dict[str, Any]) -> dict[str, Any]:
         "full_name": project.get("full_name") or project.get("name") or "Unknown",
         "private": bool(project.get("private")),
         "url": project.get("url") or "",
-        "completion": copy.deepcopy(project.get("completion") or completion.not_configured()),
+        "completion": copy.deepcopy(
+            project.get("completion") or completion.not_configured()
+        ),
         "authority_exception": copy.deepcopy(project.get("authority_exception")),
     }
 
@@ -36,21 +34,30 @@ def _repository_record(project: dict[str, Any]) -> dict[str, Any]:
 def build_data(
     ranked: list[dict[str, Any]], errors: list[str], now: dt.datetime
 ) -> dict[str, Any]:
-    """Preserve every discovered repository without public redaction or top-five limiting."""
+    """Preserve every discovered repository without redaction or top-five limiting."""
     repositories = [_repository_record(project) for project in ranked]
     queue = exceptions.queue_for(ranked)
     return {
+        "schema_version": core.OUTPUT_SCHEMA_VERSION,
+        "activity_score_version": core.ACTIVITY_SCORE_VERSION,
         "view": "internal-owner-completion",
         "owner": core.OWNER,
         "generated_at": now.isoformat(),
+        "scan_state": "partial" if errors else "complete",
+        "scan_health": core.scan_health_snapshot(errors),
+        "source_repository_count": len(repositories),
         "source_path": completion.PROGRESS_PATH,
         "authority_exception_source": {
             "branch": exceptions.EXCEPTION_BRANCH,
             "path": exceptions.EXCEPTION_PATH,
         },
+        "project_count": len(repositories),
+        "projects": repositories,
         "repository_count": len(repositories),
         "repositories": repositories,
-        "completion_summary": completion.summary_for(repositories, include_private=True),
+        "completion_summary": completion.summary_for(
+            repositories, include_private=True
+        ),
         "authority_exception_queue": queue,
         "authority_exception_summary": exceptions.summary_for(queue),
         "errors": list(errors),
@@ -58,8 +65,10 @@ def build_data(
 
 
 def write_output(data: dict[str, Any]) -> Path:
-    """Write the trusted dataset outside both public and private dashboard trees."""
+    """Write the trusted dataset outside public and private dashboard trees."""
     INTERNAL_OUT_DIR.mkdir(parents=True, exist_ok=True)
     target = INTERNAL_OUT_DIR / INTERNAL_DATASET_NAME
-    target.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    target.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     return target
