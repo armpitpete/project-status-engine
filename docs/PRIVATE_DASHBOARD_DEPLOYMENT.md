@@ -28,9 +28,51 @@ PRIVATE_STATUS_DEPLOY_ENABLED=true
 
 When the variable is absent or not exactly `true`, private deployment is skipped. Public generation and GitHub Pages deployment continue normally.
 
-## Server preparation
+## Bounded provisioning path
 
-Generate a dedicated key pair outside GitHub Actions. Install only the public key in the `vaelinya` account's `authorized_keys`. Do not reuse a personal interactive key and do not configure an SSH password in the workflow.
+The repository includes two operator scripts. They prepare the required credential and server target but do not modify GitHub secrets, enable deployment or assert that a host key is trusted.
+
+### 1. Create the dedicated key on Windows
+
+From a trusted local checkout in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\prepare_private_deploy_credentials.ps1
+```
+
+The script:
+
+- requires the Windows OpenSSH `ssh-keygen` command;
+- creates a dedicated Ed25519 key under `$HOME\.project-status-engine-private-deploy`;
+- refuses to overwrite an existing credential unless `-Force` is explicitly supplied;
+- prints the public-key fingerprint and file locations;
+- does not print the private-key contents;
+- writes a local provisioning manifest containing the remaining steps.
+
+Use the generated `.pub` file on the server. Store the complete private-key file as `PRIVATE_STATUS_DEPLOY_KEY`. Do not commit either generated key.
+
+### 2. Provision the exact server target
+
+Copy only the public key and `scripts/provision_private_dashboard_target.sh` to a trusted administrative session on the server. Then run:
+
+```bash
+sudo bash scripts/provision_private_dashboard_target.sh /path/to/project-status-engine-private-deploy-ed25519.pub
+```
+
+The script fails closed unless:
+
+- it is run through root or `sudo`;
+- the `vaelinya` account exists with home `/home/vaelinya`;
+- `/home/vaelinya/public_html/private` already exists;
+- the supplied file contains exactly one Ed25519 public key.
+
+It installs the key with forwarding, PTY and user-RC restrictions, creates only the exact project target, verifies that `vaelinya` can write it, prints trusted-console host-key fingerprints and emits a candidate Ed25519 known-hosts line.
+
+The candidate line is not authority by itself. Compare its fingerprint through an independent trusted channel before storing it as `PRIVATE_STATUS_KNOWN_HOSTS`.
+
+## Server preparation boundary
+
+Generate the dedicated key pair outside GitHub Actions. Install only the public key in the `vaelinya` account's `authorized_keys`. Do not reuse a personal interactive key and do not configure an SSH password in the workflow.
 
 The `vaelinya` account must be able to:
 
@@ -83,9 +125,14 @@ Deployment fails closed unless these generated files exist and are non-empty:
 
 ## Operational acceptance
 
-After enabling deployment, run `Generate project status` manually or allow the next scheduled/main run. Acceptance requires:
+After provisioning the server and creating both secrets:
 
-- the deployment steps pass;
+1. create repository Actions variable `PRIVATE_STATUS_DEPLOY_ENABLED=true`;
+2. run `Generate project status` manually on `main` or allow the next scheduled run;
+3. verify that the credential preparation, private deployment and anonymous-access verification steps pass.
+
+Acceptance requires:
+
 - the exact remote directory contains the current private build;
 - the authenticated URL shows real repository identities, the private top five, private `Do Next`, the owner-wide exception queue and resolution templates;
 - an unauthenticated request remains blocked by Cloudflare Access;
