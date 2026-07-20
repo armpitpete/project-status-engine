@@ -25,7 +25,7 @@ $keyPath = Join-Path $resolvedOutput $KeyName
 $publicKeyPath = "$keyPath.pub"
 $manifestPath = Join-Path $resolvedOutput "provisioning-manifest.txt"
 
-$existing = @($keyPath, $publicKeyPath, $manifestPath) | Where-Object { Test-Path -LiteralPath $_ }
+$existing = @(@($keyPath, $publicKeyPath, $manifestPath) | Where-Object { Test-Path -LiteralPath $_ })
 if ($existing.Count -gt 0 -and -not $Force) {
     Stop-WithError (
         "Provisioning files already exist. Refusing to overwrite: " +

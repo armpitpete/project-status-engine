@@ -21,6 +21,16 @@ class WindowsCredentialPreparationTests(unittest.TestCase):
         self.assertIn('if ($existing.Count -gt 0 -and -not $Force)', self.script)
         self.assertIn('Re-run with -Force only after confirming', self.script)
 
+    def test_existing_path_scan_is_always_materialized_as_an_array(self):
+        self.assertIn(
+            '$existing = @(@($keyPath, $publicKeyPath, $manifestPath) | Where-Object',
+            self.script,
+        )
+        self.assertNotIn(
+            '$existing = @($keyPath, $publicKeyPath, $manifestPath) | Where-Object',
+            self.script,
+        )
+
     def test_does_not_print_or_copy_private_key_contents(self):
         self.assertIn('The private-key contents were not printed', self.script)
         self.assertNotIn('Get-Content -LiteralPath $keyPath', self.script)
