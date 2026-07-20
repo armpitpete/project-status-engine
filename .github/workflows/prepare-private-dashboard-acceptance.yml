@@ -1,0 +1,84 @@
+name: Prepare private dashboard acceptance README
+
+on:
+  push:
+    branches:
+      - authority/complete-private-dashboard-delivery
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Apply accepted delivery authority and regenerate marker
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, "scripts")
+          import completion_status
+          import readme_sync
+
+          path = Path("README.md")
+          text = path.read_text(encoding="utf-8")
+
+          old_delivery = (
+              "The workflow currently generates the private view into `private-build/` on the ephemeral "
+              "runner but does not upload it into the public Pages artifact. An authenticated deployment "
+              "target remains a separate delivery task."
+          )
+          new_delivery = (
+              "The workflow generates the private view into `private-build/` without placing it in the "
+              "public Pages artifact. On non-pull-request runs with private deployment enabled, it deploys "
+              "that directory through a dedicated Ed25519 credential and pinned host key to "
+              "`https://command.vaelinya.uk/private/project-status-engine/`, then verifies that anonymous "
+              "access remains blocked by Cloudflare Access. Main run `29748153645` on merge commit "
+              "`01c2a7ec1913a0119c4a49f1d3c4376325634bb6` passed generation, separation, deployment and anonymous-"
+              "access validation; authenticated owner review on 2026-07-20 confirmed the live top-five "
+              "dashboard, current `Do Next` items and private completion/authority sections."
+          )
+          old_scope = "- private authenticated hosting still to be attached."
+          new_scope = (
+              "- authenticated private hosting at "
+              "`https://command.vaelinya.uk/private/project-status-engine/` behind Cloudflare Access."
+          )
+
+          if text.count(old_delivery) != 1:
+              raise SystemExit("expected one stale delivery paragraph")
+          if text.count(old_scope) != 1:
+              raise SystemExit("expected one stale scope item")
+
+          text = text.replace(old_delivery, new_delivery).replace(old_scope, new_scope)
+          path.write_text(text, encoding="utf-8")
+
+          document = json.loads(Path(".project/progress.json").read_text(encoding="utf-8"))
+          completion = completion_status.validate_progress(document)
+          desired = readme_sync.desired_readme(path.read_bytes(), completion)
+          path.write_bytes(desired)
+
+          final = path.read_text(encoding="utf-8")
+          assert old_delivery not in final
+          assert old_scope not in final
+          assert "Authenticated private dashboard delivery | `1/1` — **100.0%**" in final
+          print("Prepared accepted private delivery authority and generated completion marker.")
+          PY
+
+      - name: Upload verified README
+        uses: actions/upload-artifact@v4
+        with:
+          name: accepted-private-dashboard-readme
+          path: README.md
+          if-no-files-found: error
+          retention-days: 1
