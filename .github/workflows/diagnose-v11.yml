@@ -1,0 +1,42 @@
+name: Diagnose v1.1 consolidation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Compile changed Python
+        continue-on-error: true
+        run: >-
+          python -m py_compile
+          scripts/live_status.py
+          scripts/dual_status.py
+          scripts/internal_completion.py
+          scripts/validate_generated_outputs.py
+          > compile.log 2>&1
+      - name: Run deterministic tests
+        continue-on-error: true
+        run: python -m unittest discover -s tests -p "test_*.py" > tests.log 2>&1
+      - name: Record results
+        run: |
+          printf 'compile-exit cannot be recovered from continue-on-error; see compile.log\n' > summary.txt
+          wc -l compile.log tests.log >> summary.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v11-diagnostic
+          path: |
+            compile.log
+            tests.log
+            summary.txt
+          retention-days: 1
