@@ -168,7 +168,28 @@ jobs:
 
           assert "authority_exception_queue" not in public
           assert "authority_exception_summary" not in public
-          assert all("authority_exception" not in item for item in public["projects"])
+          assert len(public["projects"]) == len(internal["repositories"])
+
+          for rank, (internal_record, public_record) in enumerate(
+              zip(internal["repositories"], public["projects"], strict=True),
+              1,
+          ):
+              assert public_record["rank"] == rank
+              assert "authority_exception" not in public_record
+              if internal_record["private"]:
+                  placeholder = f"Private project #{rank}"
+                  assert public_record["private"] is True
+                  assert public_record["name"] == placeholder
+                  assert public_record["full_name"] == placeholder
+                  assert public_record["url"] == ""
+                  assert public_record["open_issues"] == []
+                  assert public_record["open_prs"] == []
+                  assert public_record["latest_commit"] is None
+                  assert public_record["recent_commit_count"] == 0
+                  assert "completion" not in public_record
+              else:
+                  assert public_record["private"] is False
+                  assert public_record["full_name"] == internal_record["full_name"]
 
           public_text = "\n".join(
               path.read_text(encoding="utf-8")
@@ -178,33 +199,13 @@ jobs:
           for record in internal["repositories"]:
               if not record["private"]:
                   continue
-
-              forbidden = [
-                  record["full_name"],
-                  record.get("url") or "",
-              ]
-              completion = record.get("completion") or {}
-              if completion.get("state") == "valid":
-                  forbidden.append(completion.get("authority") or "")
-                  for stage in completion["stages"]:
-                      forbidden.append(stage["label"])
-                      if stage.get("evidence"):
-                          forbidden.append(stage["evidence"])
-
-              exception = record.get("authority_exception") or {}
-              forbidden.extend(
-                  [
-                      exception.get("detail") or "",
-                      exception.get("source_sha") or "",
-                  ]
-              )
-              for value in forbidden:
+              for value in (record["full_name"], record.get("url") or ""):
                   if value:
                       assert value not in public_text
 
           print(
               "Verified runtime completion authority, all-valid policy resolution, "
-              "owner-wide exception queues, and structural public output separation."
+              "owner-wide exception queues, and structural public redaction."
           )
           PY
 
