@@ -112,8 +112,10 @@ def base_data(
 def build_public_data(
     ranked: list[dict[str, Any]], errors: list[str], now: dt.datetime
 ) -> dict[str, Any]:
-    """Public view contains every ranked candidate, with private projects redacted."""
+    """Public view contains every ranked candidate without authority-exception data."""
     projects = [core.public_project(project, rank) for rank, project in enumerate(ranked, 1)]
+    for project in projects:
+        project.pop("authority_exception", None)
     data = base_data(projects, len(ranked), errors, now, "public")
     data["priority"] = core.priority_for(projects)
     return data
