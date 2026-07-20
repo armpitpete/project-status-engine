@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import authority_exception_details as exception_details
 import authority_exceptions as exceptions
 import completion_status as completion
 import live_status as core
@@ -192,7 +193,7 @@ def _inject_completion(html_text: str, data: dict[str, Any]) -> str:
 
 
 def _inject_authority_exceptions(html_text: str, data: dict[str, Any]) -> str:
-    section = exceptions.render_html(data)
+    section = exceptions.render_html(data) + exception_details.render_html(data)
     marker = "</main>"
     return html_text.replace(marker, f"{section}{marker}", 1)
 
@@ -254,7 +255,9 @@ def write_private_outputs(data: dict[str, Any]) -> None:
     (PRIVATE_OUT_DIR / "index.html").write_text(render_private_html(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "project-status.md").write_text(core.render_project_markdown(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "completion-status.md").write_text(completion.render_markdown(data), encoding="utf-8")
-    (PRIVATE_OUT_DIR / "authority-exceptions.md").write_text(exceptions.render_markdown(data), encoding="utf-8")
+    exception_markdown = exceptions.render_markdown(data) + "\n" + exception_details.render_markdown(data)
+    (PRIVATE_OUT_DIR / "authority-exceptions.md").write_text(exception_markdown, encoding="utf-8")
+    (PRIVATE_OUT_DIR / "authority-resolution-templates.md").write_text(exceptions.render_resolution_templates(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "home-pc-tasks.md").write_text(owner_home_markdown(data), encoding="utf-8")
 
 
