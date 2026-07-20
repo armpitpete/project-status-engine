@@ -11,6 +11,11 @@ def merge_approved(client: GitHubClient, *, apply: bool) -> list[Result]:
             "action": "readme_repair",
             "allowed_paths": {README_PATH},
         },
+        CONTRACT_REPAIR_BRANCH: {
+            "title": CONTRACT_REPAIR_PR_TITLE,
+            "action": "contract_repair",
+            "allowed_paths": {README_PATH, PROGRESS_PATH},
+        },
     }
     for repo in active_repositories(client.repositories()):
         full_name = repo["full_name"]
