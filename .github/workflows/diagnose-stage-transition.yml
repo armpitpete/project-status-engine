@@ -1,0 +1,74 @@
+name: Diagnose stage transition
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Generate current views
+        env:
+          PROJECT_STATUS_TOKEN: ${{ secrets.PROJECT_STATUS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATUS_OWNER: armpitpete
+          STATUS_MAX_REPOS: "100"
+          STATUS_MAX_ITEMS: "8"
+          STATUS_PROJECT_LIMIT: "5"
+          STATUS_ACTIVITY_WINDOW_DAYS: "30"
+          STATUS_PROGRESS_PATH: .project/progress.json
+          STATUS_OUT_DIR: public
+          PRIVATE_STATUS_OUT_DIR: private-build
+          INTERNAL_STATUS_OUT_DIR: internal-build
+        run: python scripts/generate_status.py
+      - name: Record anonymous stage values
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, "scripts")
+          import completion_status
+          import resolve_readme_pilots as resolver
+          data_path = Path("internal-build/completion-status.json")
+          selectors_path = Path("config/readme-sync-pilots.json")
+          data = json.loads(data_path.read_text(encoding="utf-8"))
+          selectors = resolver.load_selectors(selectors_path)
+          resolved = resolver.resolve(data_path, selectors_path)
+          records = {
+              hashlib.sha256(item["full_name"].encode("utf-8")).hexdigest(): item
+              for item in data["repositories"]
+          }
+          ids = {
+              selector["id"]: target_hash
+              for selector, target_hash in zip(selectors, resolved["target_hashes"], strict=True)
+          }
+          local = completion_status.validate_progress(
+              json.loads(Path(".project/progress.json").read_text(encoding="utf-8"))
+          )
+          live = records[ids["pilot-03"]]["completion"]
+          result = {
+              "event": os.environ.get("GITHUB_EVENT_NAME"),
+              "local": {stage["id"]: stage["percentage"] for stage in local["stages"]},
+              "live": {stage["id"]: stage["percentage"] for stage in live["stages"]},
+              "state": live["state"],
+              "overall": live["overall_percentage"],
+          }
+          Path("stage-transition.json").write_text(json.dumps(result, indent=2) + "\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stage-transition
+          path: stage-transition.json
+          retention-days: 1
