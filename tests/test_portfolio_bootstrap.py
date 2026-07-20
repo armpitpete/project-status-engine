@@ -127,22 +127,26 @@ class PortfolioBootstrapTests(unittest.TestCase):
 
     def test_aggregate_report_excludes_target_identifiers(self):
         secret_target = "a" * 64
-        report = subject.aggregate_run_report(
-            "apply",
-            49,
-            [
-                subject.Result(secret_target, "exception", "insufficient_authority"),
-                subject.Result("b" * 64, "opened_pr"),
-            ],
-            "complete",
-        ).decode("utf-8")
-        self.assertNotIn(secret_target, report)
-        self.assertNotIn("b" * 64, report)
-        self.assertIn('"inventory": 49', report)
-        self.assertIn('"insufficient_authority": 1', report)
+        report = json.loads(
+            subject.aggregate_run_report(
+                "apply",
+                49,
+                [
+                    subject.Result(secret_target, "exception", "no_completion_evidence"),
+                    subject.Result("b" * 64, "opened_pr"),
+                ],
+                "complete",
+            )
+        )
+        text = json.dumps(report)
+        self.assertNotIn(secret_target, text)
+        self.assertNotIn("b" * 64, text)
+        self.assertEqual(report["inventory"], 49)
+        self.assertEqual(report["exceptions"]["no_completion_evidence"], 1)
+        self.assertNotIn("codes", report)
 
     def test_evidence_exceptions_do_not_fail_the_run(self):
-        results = [subject.Result("a" * 64, "exception", "insufficient_authority")]
+        results = [subject.Result("a" * 64, "exception", "no_completion_evidence")]
         self.assertFalse(subject.has_infrastructure_failures(results))
 
     def test_infrastructure_failures_fail_the_run(self):
