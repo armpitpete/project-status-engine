@@ -41,7 +41,7 @@ class PortfolioBootstrapTokenBoundaryTests(unittest.TestCase):
         self.assertNotIn("owner/", report)
         self.assertNotIn("a" * 64, report)
 
-    def test_exception_plan_uses_branch_report(self):
+    def test_exception_plan_uses_primary_code_in_branch_report(self):
         calls = []
 
         class Client:
@@ -56,14 +56,22 @@ class PortfolioBootstrapTokenBoundaryTests(unittest.TestCase):
             "manuscript",
             "exception",
             {},
-            "insufficient_authority",
+            "no_completion_evidence",
             "No bounded count.",
         )
         result = subject.apply_plan(plan, Client(), apply=True)
         self.assertEqual(result.action, "exception")
         self.assertEqual(
             calls,
-            [("owner/repo", "abc123", "manuscript", "insufficient_authority", "No bounded count.")],
+            [
+                (
+                    "owner/repo",
+                    "abc123",
+                    "manuscript",
+                    "no_completion_evidence",
+                    "No bounded count.",
+                )
+            ],
         )
 
     def test_unchanged_plan_clears_exception_branch(self):
