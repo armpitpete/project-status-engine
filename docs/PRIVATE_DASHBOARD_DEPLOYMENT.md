@@ -110,4 +110,4 @@ It also requires:
 6. confirm detailed completion and exceptions are absent from the overview but present on their dedicated pages;
 7. confirm the public Pages output contains no private identity or exception material.
 
-Do not declare delivery complete without live authenticated and unauthenticated proof. Rotation, incident and recovery procedures are in `docs/OPERATIONS.md`.
+Do not declare authenticated private delivery complete until this live proof has passed. Rotation, incident and recovery procedures are in `docs/OPERATIONS.md`.
