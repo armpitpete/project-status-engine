@@ -36,7 +36,7 @@ jobs:
           INTERNAL_STATUS_OUT_DIR: internal-build
         run: python scripts/generate_status.py
 
-      - name: Report anonymous selector match counts
+      - name: Record anonymous selector match counts
         run: |
           python - <<'PY'
           import json
@@ -48,6 +48,7 @@ jobs:
 
           selectors = resolver.load_selectors(Path("config/readme-sync-pilots.json"))
           candidates = resolver._load_candidates(Path("internal-build/completion-status.json"))
+          results = []
 
           for selector in selectors:
               matches = [
@@ -58,13 +59,22 @@ jobs:
                   and candidate["authority"] == selector["authority"]
                   and candidate["stage_ids"] == selector["stage_ids"]
               ]
-              print(
-                  json.dumps(
-                      {
-                          "selector_id": selector["id"],
-                          "match_count": len(matches),
-                      },
-                      separators=(",", ":"),
-                  )
+              results.append(
+                  {
+                      "selector_id": selector["id"],
+                      "match_count": len(matches),
+                  }
               )
+
+          output = Path("selector-match-counts.json")
+          output.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+          print(output.read_text(encoding="utf-8"))
           PY
+
+      - name: Upload anonymous selector diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: selector-match-counts
+          path: selector-match-counts.json
+          if-no-files-found: error
+          retention-days: 1
