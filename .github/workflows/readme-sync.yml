@@ -17,7 +17,7 @@ on:
     paths:
       - ".github/workflows/readme-sync.yml"
       - "config/readme-sync-policy.json"
-      - "config/readme-sync-pilots.json"
+      - "tests/fixtures/readme-sync-contract-shapes.json"
       - "scripts/readme_sync.py"
       - "scripts/readme_sync_runner.py"
       - "scripts/resolve_readme_pilots.py"
@@ -30,7 +30,7 @@ on:
     paths:
       - ".github/workflows/readme-sync.yml"
       - "config/readme-sync-policy.json"
-      - "config/readme-sync-pilots.json"
+      - "tests/fixtures/readme-sync-contract-shapes.json"
       - "scripts/readme_sync.py"
       - "scripts/readme_sync_runner.py"
       - "scripts/resolve_readme_pilots.py"
@@ -50,10 +50,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.x"
 
@@ -70,17 +70,17 @@ jobs:
           policy = json.loads(policy_path.read_text(encoding="utf-8"))
           assert policy == {"schema_version": 1, "mode": "all-valid"}
 
-          baseline_path = Path("config/readme-sync-pilots.json")
-          baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
-          assert baseline["schema_version"] == 1
-          assert len(baseline["targets"]) == 3
+          fixture_path = Path("tests/fixtures/readme-sync-contract-shapes.json")
+          fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+          assert fixture["schema_version"] == 1
+          assert len(fixture["targets"]) == 3
 
-          text = policy_path.read_text(encoding="utf-8") + baseline_path.read_text(
+          text = policy_path.read_text(encoding="utf-8") + fixture_path.read_text(
               encoding="utf-8"
           )
           assert "github.com" not in text
           assert "armpitpete/" not in text
-          print("Verified identity-free all-valid policy and baseline fixtures.")
+          print("Verified identity-free all-valid policy and test-only contract fixtures.")
           PY
 
   synchronise:
@@ -91,10 +91,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.x"
 
@@ -107,6 +107,7 @@ jobs:
           STATUS_MAX_ITEMS: "8"
           STATUS_PROJECT_LIMIT: "5"
           STATUS_ACTIVITY_WINDOW_DAYS: "30"
+          STATUS_API_RETRIES: "2"
           STATUS_PROGRESS_PATH: .project/progress.json
           STATUS_OUT_DIR: public
           PRIVATE_STATUS_OUT_DIR: private-build
