@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Read and render owner-only completion-authority exception records.
+"""Read and route owner-only completion-authority exception records.
 
 Exception records live on the automation exception branch in each repository.
-They are never exposed through the public status view.
+They are enriched from an identity-free resolution policy and never exposed
+through the public status view.
 """
 from __future__ import annotations
 
@@ -10,12 +11,17 @@ import base64
 import html
 import json
 import re
+from pathlib import Path
 from typing import Any, Callable, Iterable
 
 SCHEMA_VERSION = 2
 EXCEPTION_BRANCH = "automation/project-status-bootstrap-exception"
 EXCEPTION_PATH = ".project/bootstrap-exception.json"
 REGISTRY_PATH = "config/portfolio-authority-registry.json"
+RESOLUTION_REGISTRY_REFERENCE = "config/authority-resolution-lanes.json"
+RESOLUTION_REGISTRY_PATH = (
+    Path(__file__).resolve().parents[1] / RESOLUTION_REGISTRY_REFERENCE
+)
 PRIMARY_CODES = (
     "missing_completion_contract",
     "missing_authoritative_source",
@@ -27,6 +33,7 @@ PRIMARY_CODES = (
 )
 PRIMARY_CODE_SET = frozenset(PRIMARY_CODES)
 SHA = re.compile(r"^[0-9a-f]{40}$")
+LANE_ID = re.compile(r"^[a-z][a-z0-9_]*$")
 ALLOWED_FIELDS = {
     "schema_version",
     "status",
@@ -37,10 +44,16 @@ ALLOWED_FIELDS = {
     "detail",
     "accepted_evidence",
 }
+RESOLUTION_FIELDS = {
+    "resolution_lane",
+    "owner_decision_required",
+    "required_action",
+    "template_kind",
+}
 
 
 class AuthorityExceptionError(ValueError):
-    """Raised when an exception record is structurally invalid."""
+    """Raised when an exception or resolution-policy record is invalid."""
 
 
 def _required_text(value: Any, field: str) -> str:
@@ -53,9 +66,63 @@ def _object_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise AuthorityExceptionError(f"exception record contains duplicate key: {key}")
+            raise AuthorityExceptionError(f"JSON contains duplicate key: {key}")
         result[key] = value
     return result
+
+
+def _load_json(path: Path, label: str) -> Any:
+    try:
+        return json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=_object_without_duplicates,
+        )
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise AuthorityExceptionError(f"{label} is unreadable") from exc
+
+
+def load_resolution_registry(
+    path: Path = RESOLUTION_REGISTRY_PATH,
+) -> dict[str, dict[str, Any]]:
+    document = _load_json(path, "authority resolution registry")
+    if not isinstance(document, dict):
+        raise AuthorityExceptionError("authority resolution registry must be an object")
+    if set(document) != {"schema_version", "registry_type", "lanes"}:
+        raise AuthorityExceptionError("authority resolution registry fields are invalid")
+    if document.get("schema_version") != 1:
+        raise AuthorityExceptionError("authority resolution registry schema_version must be 1")
+    if document.get("registry_type") != "authority-resolution-policy":
+        raise AuthorityExceptionError("authority resolution registry type is invalid")
+    lanes = document.get("lanes")
+    if not isinstance(lanes, dict) or set(lanes) != PRIMARY_CODE_SET:
+        raise AuthorityExceptionError("authority resolution registry must cover all primary codes")
+    result: dict[str, dict[str, Any]] = {}
+    for code in PRIMARY_CODES:
+        raw = lanes.get(code)
+        if not isinstance(raw, dict) or set(raw) != RESOLUTION_FIELDS:
+            raise AuthorityExceptionError(f"resolution lane fields are invalid for {code}")
+        lane = _required_text(raw.get("resolution_lane"), f"{code}.resolution_lane")
+        if not LANE_ID.fullmatch(lane):
+            raise AuthorityExceptionError(f"{code}.resolution_lane is invalid")
+        owner_required = raw.get("owner_decision_required")
+        if not isinstance(owner_required, bool):
+            raise AuthorityExceptionError(
+                f"{code}.owner_decision_required must be true or false"
+            )
+        result[code] = {
+            "resolution_lane": lane,
+            "owner_decision_required": owner_required,
+            "required_action": _required_text(
+                raw.get("required_action"), f"{code}.required_action"
+            ),
+            "template_kind": _required_text(
+                raw.get("template_kind"), f"{code}.template_kind"
+            ),
+        }
+    return result
+
+
+RESOLUTION_LANES = load_resolution_registry()
 
 
 def decode_contents_payload(payload: Any) -> Any:
@@ -145,16 +212,22 @@ def queue_for(projects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
         exception = project.get("authority_exception")
         if not isinstance(exception, dict):
             continue
+        code = exception["code"]
+        policy = RESOLUTION_LANES[code]
         queue.append(
             {
                 "name": project.get("name") or project.get("full_name") or "Unknown",
                 "full_name": project.get("full_name") or project.get("name") or "Unknown",
                 "private": bool(project.get("private")),
                 "url": project.get("url") or "",
-                "code": exception["code"],
+                "code": code,
                 "project_type": exception["project_type"],
                 "detail": exception["detail"],
                 "source_sha": exception["source_sha"],
+                "resolution_lane": policy["resolution_lane"],
+                "owner_decision_required": policy["owner_decision_required"],
+                "required_action": policy["required_action"],
+                "template_kind": policy["template_kind"],
             }
         )
     return sorted(queue, key=lambda item: (item["code"], item["full_name"]))
@@ -162,14 +235,30 @@ def queue_for(projects: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def summary_for(queue: Iterable[dict[str, Any]]) -> dict[str, Any]:
     counts = {code: 0 for code in PRIMARY_CODES}
+    lane_counts = {
+        policy["resolution_lane"]: 0
+        for policy in RESOLUTION_LANES.values()
+    }
     total = 0
+    owner_decisions = 0
     for item in queue:
         code = item.get("code")
         if code not in PRIMARY_CODE_SET:
             raise AuthorityExceptionError("queue contains an unregistered primary exception")
+        expected = RESOLUTION_LANES[code]
+        if item.get("resolution_lane") != expected["resolution_lane"]:
+            raise AuthorityExceptionError("queue contains an invalid resolution lane")
         counts[code] += 1
+        lane_counts[expected["resolution_lane"]] += 1
         total += 1
-    return {"total": total, "counts": counts}
+        if bool(item.get("owner_decision_required")):
+            owner_decisions += 1
+    return {
+        "total": total,
+        "owner_decision_required": owner_decisions,
+        "counts": counts,
+        "lane_counts": dict(sorted(lane_counts.items())),
+    }
 
 
 def render_markdown(data: dict[str, Any]) -> str:
@@ -183,11 +272,119 @@ def render_markdown(data: dict[str, Any]) -> str:
     if not queue:
         lines.append("No completion-authority exceptions are currently recorded.")
         return "\n".join(lines).strip() + "\n"
-    lines.extend(["| Repository | Primary exception | Detail |", "|---|---|---|"])
+    lines.extend(
+        [
+            "| Repository | Primary exception | Resolution lane | Owner decision | Required action |",
+            "|---|---|---|---:|---|",
+        ]
+    )
     for item in queue:
-        detail = str(item.get("detail") or "").replace("|", "\\|").replace("\n", " ")
+        action = str(item.get("required_action") or "").replace("|", "\\|").replace("\n", " ")
+        decision = "yes" if item.get("owner_decision_required") else "no"
         lines.append(
-            f"| `{item['full_name']}` | `{item['code']}` | {detail} |"
+            f"| `{item['full_name']}` | `{item['code']}` | `{item['resolution_lane']}` | {decision} | {action} |"
+        )
+    return "\n".join(lines).strip() + "\n"
+
+
+def _template_for(item: dict[str, Any]) -> list[str]:
+    kind = item["template_kind"]
+    if kind == "new_authority_record":
+        return [
+            "Suggested file: `docs/PROJECT_AUTHORITY.md`",
+            "",
+            "```markdown",
+            "# Project Authority",
+            "",
+            "## Completion scope",
+            "[Human-approved bounded project scope]",
+            "",
+            "## Bounded completion evidence",
+            "- [Stage label]: [completed] of [total] complete",
+            "```",
+        ]
+    if kind == "bounded_evidence_addition":
+        return [
+            "Add to one existing authority or status document:",
+            "",
+            "```markdown",
+            "## Bounded completion evidence",
+            "- [Stage label]: [completed] of [total] complete",
+            "```",
+            "",
+            "The values must be human-approved; do not derive them from activity or file counts.",
+        ]
+    if kind == "project_type_decision":
+        return [
+            "Record one owner decision:",
+            "",
+            "```text",
+            "Project type: manuscript | website | software | hardware | music | documentation | mixed",
+            "Decision evidence: [why this type is authoritative]",
+            "```",
+        ]
+    if kind == "evidence_reconciliation":
+        return [
+            "Reconciliation record:",
+            "",
+            "```text",
+            "Conflicting sources: [paths and statements]",
+            "Authoritative source retained: [path]",
+            "Superseded statement removed or corrected: [path and change]",
+            "Approved completed/total evidence: [stage and counts]",
+            "```",
+        ]
+    if kind == "repository_lifecycle_decision":
+        return [
+            "Record one owner lifecycle decision:",
+            "",
+            "```text",
+            "Decision: active | archive | excluded",
+            "Reason: [bounded rationale]",
+            "Completion onboarding required: yes | no",
+            "```",
+        ]
+    if kind == "readme_marker_decision":
+        return [
+            "Authorise one exact README marker correction:",
+            "",
+            "```text",
+            "Human-written bytes to preserve: [range or hash]",
+            "Marker pair to retain or create: exactly one ordered pair",
+            "Duplicate/partial/reversed markers to remove: [exact locations]",
+            "```",
+        ]
+    if kind == "contract_repair_review":
+        return [
+            "Run the controlled completion-contract repair lane. When it remains unresolved, add or reconcile explicit bounded authority evidence rather than editing generated percentages.",
+        ]
+    raise AuthorityExceptionError(f"unknown resolution template kind: {kind}")
+
+
+def render_resolution_templates(data: dict[str, Any]) -> str:
+    queue = data.get("authority_exception_queue") or []
+    lines = [
+        "# Authority and Owner-Decision Templates",
+        "",
+        "Generated owner-only prompts. Placeholder values require human approval and are never filled from repository activity.",
+        "",
+    ]
+    if not queue:
+        lines.append("No authority or owner-decision templates are currently required.")
+        return "\n".join(lines).strip() + "\n"
+    for item in queue:
+        lines.extend(
+            [
+                f"## {item['full_name']}",
+                "",
+                f"- Primary exception: `{item['code']}`",
+                f"- Resolution lane: `{item['resolution_lane']}`",
+                f"- Owner decision required: `{'yes' if item['owner_decision_required'] else 'no'}`",
+                f"- Required action: {item['required_action']}",
+                "",
+                *_template_for(item),
+                "",
+            ]
         )
     return "\n".join(lines).strip() + "\n"
 
@@ -202,13 +399,16 @@ def render_html(data: dict[str, Any]) -> str:
             f"<td><a href=\"{html.escape(str(item.get('url') or ''), quote=True)}\">"
             f"{html.escape(str(item.get('full_name') or 'Unknown'))}</a></td>"
             f"<td><code>{html.escape(str(item.get('code') or ''))}</code></td>"
-            f"<td>{html.escape(str(item.get('detail') or ''))}</td>"
+            f"<td><code>{html.escape(str(item.get('resolution_lane') or ''))}</code></td>"
+            f"<td>{'yes' if item.get('owner_decision_required') else 'no'}</td>"
+            f"<td>{html.escape(str(item.get('required_action') or ''))}</td>"
             "</tr>"
             for item in queue
         )
         body = (
             "<div class=\"table-wrap\"><table><thead><tr>"
-            "<th>Repository</th><th>Primary exception</th><th>Detail</th>"
+            "<th>Repository</th><th>Primary exception</th><th>Resolution lane</th>"
+            "<th>Owner decision</th><th>Required action</th>"
             f"</tr></thead><tbody>{rows}</tbody></table></div>"
         )
     return (
