@@ -53,7 +53,7 @@ jobs:
           INTERNAL_STATUS_OUT_DIR: internal-build
         run: python scripts/generate_status.py
 
-      - name: Validate output separation and pilot completion data
+      - name: Validate output separation and current completion data
         run: |
           test -f public/index.html
           test -f public/status.json
@@ -84,81 +84,62 @@ jobs:
           internal_path = Path("internal-build/completion-status.json")
           private_path = Path("private-build/status.json")
           public_path = Path("public/status.json")
-          selector_path = Path("config/readme-sync-pilots.json")
+          policy_path = Path("config/readme-sync-policy.json")
           internal = json.loads(internal_path.read_text(encoding="utf-8"))
           private = json.loads(private_path.read_text(encoding="utf-8"))
           public = json.loads(public_path.read_text(encoding="utf-8"))
-          selectors = resolver.load_selectors(selector_path)
-          resolved = resolver.resolve(internal_path, selector_path)
-          local_progress = completion_status.validate_progress(
-              json.loads(Path(".project/progress.json").read_text(encoding="utf-8"))
-          )
-          local_delivery = next(
-              stage["percentage"]
-              for stage in local_progress["stages"]
-              if stage["id"] == "private_authenticated_delivery"
-          )
 
           repositories = {
               hashlib.sha256(item["full_name"].encode("utf-8")).hexdigest(): item
               for item in internal["repositories"]
           }
-          pilot_hashes = {
-              selector["id"]: target_hash
-              for selector, target_hash in zip(
-                  selectors,
-                  resolved["target_hashes"],
-                  strict=True,
-              )
-          }
-          expected = {
-              "pilot-01": {
-                  "private": True,
-                  "stages": {
-                      "editorially_complete_manuscript": 100.0,
-                      "publication_assembly": 0.0,
-                      "docx_preflight": 0.0,
-                      "pdf_preflight": 0.0,
-                  },
-              },
-              "pilot-02": {
-                  "private": True,
-                  "stages": {
-                      "core_grammar_decisions": 80.0,
-                  },
-              },
-              "pilot-03": {
-                  "private": False,
-                  "stages": {
-                      "activity_dashboard": 100.0,
-                      "completion_authority_engine": 100.0,
-                      "private_authenticated_delivery": local_delivery,
-                      "daily_readme_synchroniser": 100.0,
-                  },
-              },
-          }
+          runtime_hash = hashlib.sha256(
+              os.environ["GITHUB_REPOSITORY"].encode("utf-8")
+          ).hexdigest()
+          runtime_record = repositories[runtime_hash]
+          runtime_completion = runtime_record["completion"]
+          local_progress = completion_status.validate_progress(
+              json.loads(Path(".project/progress.json").read_text(encoding="utf-8"))
+          )
 
-          assert set(pilot_hashes) == set(expected)
-          for pilot_id, expectation in expected.items():
-              record = repositories[pilot_hashes[pilot_id]]
-              completion = record["completion"]
-              assert completion["state"] == "valid"
-              actual_stages = {
-                  stage["id"]: stage["percentage"]
-                  for stage in completion["stages"]
-              }
-              if pilot_id == "pilot-03" and actual_stages != expectation["stages"]:
-                  transition = dict(actual_stages)
-                  if (
-                      os.environ.get("GITHUB_EVENT_NAME") == "pull_request"
-                      and transition.get("private_authenticated_delivery") == 0.0
-                      and expectation["stages"]["private_authenticated_delivery"] == 100.0
-                  ):
-                      transition["private_authenticated_delivery"] = 100.0
-                      actual_stages = transition
-              assert actual_stages == expectation["stages"]
-              assert completion["overall_percentage"] is None
-              assert record["private"] is expectation["private"]
+          assert runtime_record["private"] is False
+          assert runtime_completion["state"] == "valid"
+          assert runtime_completion["authority"] == local_progress["authority"]
+          assert runtime_completion["project_type"] == local_progress["project_type"]
+          assert runtime_completion["overall_percentage"] is None
+          assert local_progress["overall_percentage"] is None
+
+          live_stages = {
+              stage["id"]: stage["percentage"]
+              for stage in runtime_completion["stages"]
+          }
+          local_stages = {
+              stage["id"]: stage["percentage"]
+              for stage in local_progress["stages"]
+          }
+          if live_stages != local_stages:
+              transition = dict(live_stages)
+              delivery = "private_authenticated_delivery"
+              other_ids = set(local_stages) - {delivery}
+              transition_allowed = (
+                  os.environ.get("GITHUB_EVENT_NAME") == "pull_request"
+                  and set(transition) == set(local_stages)
+                  and transition.get(delivery) == 0.0
+                  and local_stages.get(delivery) == 100.0
+                  and all(transition[stage_id] == local_stages[stage_id] for stage_id in other_ids)
+              )
+              assert transition_allowed
+              transition[delivery] = 100.0
+              live_stages = transition
+          assert live_stages == local_stages
+
+          resolved_policy = resolver.resolve_policy(internal_path, policy_path)
+          expected_valid_hashes = sorted(
+              hashlib.sha256(item["full_name"].encode("utf-8")).hexdigest()
+              for item in internal["repositories"]
+              if item.get("completion", {}).get("state") == "valid"
+          )
+          assert resolved_policy["target_hashes"] == expected_valid_hashes
 
           expected_queue = sorted(
               item["full_name"]
@@ -194,40 +175,36 @@ jobs:
               for path in Path("public").rglob("*")
               if path.is_file()
           )
-          for pilot_id, expectation in expected.items():
-              if not expectation["private"]:
+          for record in internal["repositories"]:
+              if not record["private"]:
                   continue
-              record = repositories[pilot_hashes[pilot_id]]
-              completion = record["completion"]
+
               forbidden = [
                   record["full_name"],
                   record.get("url") or "",
-                  completion["authority"],
               ]
-              for stage in completion["stages"]:
-                  forbidden.append(stage["label"])
-                  if stage.get("evidence"):
-                      forbidden.append(stage["evidence"])
+              completion = record.get("completion") or {}
+              if completion.get("state") == "valid":
+                  forbidden.append(completion.get("authority") or "")
+                  for stage in completion["stages"]:
+                      forbidden.append(stage["label"])
+                      if stage.get("evidence"):
+                          forbidden.append(stage["evidence"])
+
+              exception = record.get("authority_exception") or {}
+              forbidden.extend(
+                  [
+                      exception.get("detail") or "",
+                      exception.get("source_sha") or "",
+                  ]
+              )
               for value in forbidden:
                   if value:
                       assert value not in public_text
 
-          for record in internal["repositories"]:
-              exception = record.get("authority_exception")
-              if not exception or not record["private"]:
-                  continue
-              for value in (
-                  record["full_name"],
-                  record.get("url") or "",
-                  exception.get("detail") or "",
-                  exception.get("source_sha") or "",
-              ):
-                  if value:
-                      assert value not in public_text
-
           print(
-              "Verified three contract-selected pilots, owner-wide private exception queue, "
-              "resolution lanes, and structural public output separation."
+              "Verified runtime completion authority, all-valid policy resolution, "
+              "owner-wide exception queues, and structural public output separation."
           )
           PY
 
