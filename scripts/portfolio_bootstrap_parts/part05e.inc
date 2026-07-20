@@ -22,6 +22,34 @@ def _best_effort_contract_authority(raw: bytes) -> str:
     return authority.strip() if isinstance(authority, str) else ""
 
 
+def _unreadable_contract_plan(
+    repo: dict[str, Any], client: GitHubClient, detail: str
+) -> RepositoryPlan:
+    full_name = repo["full_name"]
+    default_branch = repo["default_branch"]
+    ref = client.ref(full_name, default_branch)
+    default_sha = ref.get("object", {}).get("sha") if isinstance(ref, dict) else None
+    if not isinstance(default_sha, str):
+        raise BootstrapClosed("default_sha_missing")
+    tree = client.tree(full_name, default_sha)
+    paths = [
+        item.get("path")
+        for item in tree
+        if item.get("type") == "blob" and isinstance(item.get("path"), str)
+    ]
+    return RepositoryPlan(
+        full_name,
+        bool(repo.get("private")),
+        default_branch,
+        default_sha,
+        classify_project(repo, paths),
+        "exception",
+        {},
+        "missing_completion_contract",
+        detail,
+    )
+
+
 def contract_repair_evidence(
     plan: RepositoryPlan,
     client: GitHubClient,
@@ -83,11 +111,9 @@ def contract_repair_evidence(
     return candidates[0]
 
 
-_readme_lane_plan_repository = plan_repository
-
-
-def plan_repository(repo: dict[str, Any], client: GitHubClient) -> RepositoryPlan:
-    plan = _readme_lane_plan_repository(repo, client)
+def _plan_contract_repair(
+    plan: RepositoryPlan, client: GitHubClient
+) -> RepositoryPlan:
     if plan.action != "exception" or plan.exception_code != "missing_completion_contract":
         return plan
     if not plan.default_sha:
@@ -164,6 +190,23 @@ def plan_repository(repo: dict[str, Any], client: GitHubClient) -> RepositoryPla
         files,
         pending_pr_number=plan.pending_pr_number,
     )
+
+
+_readme_lane_plan_repository = plan_repository
+
+
+def plan_repository(repo: dict[str, Any], client: GitHubClient) -> RepositoryPlan:
+    try:
+        plan = _readme_lane_plan_repository(repo, client)
+    except BootstrapClosed as exc:
+        if exc.code != "progress_json":
+            raise
+        plan = _unreadable_contract_plan(
+            repo,
+            client,
+            "Existing .project/progress.json is not valid UTF-8 JSON.",
+        )
+    return _plan_contract_repair(plan, client)
 
 
 def _upsert_contract_repair_pr(
