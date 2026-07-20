@@ -48,3 +48,9 @@ Aggregate reports use schema version 2:
 All seven exception keys are always present. Infrastructure and API failures are recorded separately under `failures`. Reports continue to exclude repository names, URLs, authority paths, evidence text and opaque target identifiers.
 
 Repository exception branches use schema version 2 and record only one registered primary code. They still contain no inferred completion value.
+
+## Approved bootstrap convergence proof
+
+On 2026-07-20 the exact five-PR authority-backed bootstrap set identified by the preceding aggregate report was revalidated and merged as one controlled set.
+
+The next owner-wide apply run must classify those five repositories as `unchanged`, must not create replacement branches or pull requests, and must preserve the 50-repository inventory. This identity-free record exists only to trigger and anchor that convergence proof; it changes no completion authority rule.
