@@ -114,7 +114,7 @@ jobs:
               "pilot-02": {
                   "private": True,
                   "stages": {
-                      "core_grammar_decisions": 70.0,
+                      "core_grammar_decisions": 80.0,
                   },
               },
               "pilot-03": {
