@@ -3,7 +3,7 @@ name: Generate project status
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "17 * * * *"
   pull_request:
     branches:
       - main
@@ -28,10 +28,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.x"
 
@@ -47,167 +47,15 @@ jobs:
           STATUS_MAX_ITEMS: "8"
           STATUS_PROJECT_LIMIT: "5"
           STATUS_ACTIVITY_WINDOW_DAYS: "30"
+          STATUS_API_RETRIES: "2"
           STATUS_PROGRESS_PATH: .project/progress.json
           STATUS_OUT_DIR: public
           PRIVATE_STATUS_OUT_DIR: private-build
           INTERNAL_STATUS_OUT_DIR: internal-build
         run: python scripts/generate_status.py
 
-      - name: Validate output separation and current completion data
-        run: |
-          test -f public/index.html
-          test -f public/status.json
-          test -f public/completion-status.md
-          test -f private-build/index.html
-          test -f private-build/status.json
-          test -f private-build/completion-status.md
-          test -f private-build/authority-exceptions.md
-          test -f private-build/authority-resolution-templates.md
-          test -f internal-build/completion-status.json
-          test ! -e public/private-build
-          test ! -e public/private
-          test ! -e public/internal-build
-          test ! -e public/completion-status.json
-          test ! -e public/authority-exceptions.md
-          test ! -e public/authority-resolution-templates.md
-          python - <<'PY'
-          import hashlib
-          import json
-          import os
-          from pathlib import Path
-          import sys
-
-          sys.path.insert(0, "scripts")
-          import completion_status
-          import resolve_readme_pilots as resolver
-
-          internal_path = Path("internal-build/completion-status.json")
-          private_path = Path("private-build/status.json")
-          public_path = Path("public/status.json")
-          policy_path = Path("config/readme-sync-policy.json")
-          internal = json.loads(internal_path.read_text(encoding="utf-8"))
-          private = json.loads(private_path.read_text(encoding="utf-8"))
-          public = json.loads(public_path.read_text(encoding="utf-8"))
-
-          repositories = {
-              hashlib.sha256(item["full_name"].encode("utf-8")).hexdigest(): item
-              for item in internal["repositories"]
-          }
-          runtime_hash = hashlib.sha256(
-              os.environ["GITHUB_REPOSITORY"].encode("utf-8")
-          ).hexdigest()
-          runtime_record = repositories[runtime_hash]
-          runtime_completion = runtime_record["completion"]
-          local_progress = completion_status.validate_progress(
-              json.loads(Path(".project/progress.json").read_text(encoding="utf-8"))
-          )
-
-          assert runtime_record["private"] is False
-          assert runtime_completion["state"] == "valid"
-          assert runtime_completion["authority"] == local_progress["authority"]
-          assert runtime_completion["project_type"] == local_progress["project_type"]
-          assert runtime_completion["overall_percentage"] is None
-          assert local_progress["overall_percentage"] is None
-
-          live_stages = {
-              stage["id"]: stage["percentage"]
-              for stage in runtime_completion["stages"]
-          }
-          local_stages = {
-              stage["id"]: stage["percentage"]
-              for stage in local_progress["stages"]
-          }
-          if live_stages != local_stages:
-              transition = dict(live_stages)
-              delivery = "private_authenticated_delivery"
-              other_ids = set(local_stages) - {delivery}
-              transition_allowed = (
-                  os.environ.get("GITHUB_EVENT_NAME") == "pull_request"
-                  and set(transition) == set(local_stages)
-                  and transition.get(delivery) == 0.0
-                  and local_stages.get(delivery) == 100.0
-                  and all(transition[stage_id] == local_stages[stage_id] for stage_id in other_ids)
-              )
-              assert transition_allowed
-              transition[delivery] = 100.0
-              live_stages = transition
-          assert live_stages == local_stages
-
-          resolved_policy = resolver.resolve_policy(internal_path, policy_path)
-          expected_valid_hashes = sorted(
-              hashlib.sha256(item["full_name"].encode("utf-8")).hexdigest()
-              for item in internal["repositories"]
-              if item.get("completion", {}).get("state") == "valid"
-          )
-          assert resolved_policy["target_hashes"] == expected_valid_hashes
-
-          expected_queue = sorted(
-              item["full_name"]
-              for item in internal["repositories"]
-              if item.get("authority_exception")
-          )
-          internal_queue = sorted(
-              item["full_name"] for item in internal["authority_exception_queue"]
-          )
-          private_queue = sorted(
-              item["full_name"] for item in private["authority_exception_queue"]
-          )
-          assert internal_queue == expected_queue, (
-              len(internal_queue), len(expected_queue)
-          )
-          assert private_queue == expected_queue, (
-              len(private_queue), len(expected_queue)
-          )
-          assert internal["authority_exception_summary"]["total"] == len(expected_queue)
-          assert private["authority_exception_summary"]["total"] == len(expected_queue)
-          for item in internal["authority_exception_queue"]:
-              assert item["resolution_lane"]
-              assert item["required_action"]
-              assert isinstance(item["owner_decision_required"], bool)
-          assert internal["authority_exception_summary"] == private["authority_exception_summary"]
-
-          assert "authority_exception_queue" not in public
-          assert "authority_exception_summary" not in public
-          assert len(public["projects"]) == len(internal["repositories"])
-
-          for rank, (internal_record, public_record) in enumerate(
-              zip(internal["repositories"], public["projects"], strict=True),
-              1,
-          ):
-              assert public_record["rank"] == rank
-              assert "authority_exception" not in public_record
-              if internal_record["private"]:
-                  placeholder = f"Private project #{rank}"
-                  assert public_record["private"] is True
-                  assert public_record["name"] == placeholder
-                  assert public_record["full_name"] == placeholder
-                  assert public_record["url"] == ""
-                  assert public_record["open_issues"] == []
-                  assert public_record["open_prs"] == []
-                  assert public_record["latest_commit"] is None
-                  assert public_record["recent_commit_count"] == 0
-                  assert "completion" not in public_record
-              else:
-                  assert public_record["private"] is False
-                  assert public_record["full_name"] == internal_record["full_name"]
-
-          public_text = "\n".join(
-              path.read_text(encoding="utf-8")
-              for path in Path("public").rglob("*")
-              if path.is_file()
-          )
-          for record in internal["repositories"]:
-              if not record["private"]:
-                  continue
-              for value in (record["full_name"], record.get("url") or ""):
-                  if value:
-                      assert value not in public_text
-
-          print(
-              "Verified runtime completion authority, all-valid policy resolution, "
-              "owner-wide exception queues, and structural public redaction."
-          )
-          PY
+      - name: Validate generated outputs and privacy boundaries
+        run: python scripts/validate_generated_outputs.py
 
       - name: Prepare dedicated private deployment credential
         if: github.event_name != 'pull_request' && vars.PRIVATE_STATUS_DEPLOY_ENABLED == 'true'
@@ -241,7 +89,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Upload public Pages artifact only
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           name: ${{ env.PAGES_ARTIFACT_NAME }}
           path: public
