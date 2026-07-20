@@ -122,7 +122,7 @@ jobs:
                   "stages": {
                       "activity_dashboard": 100.0,
                       "completion_authority_engine": 100.0,
-                      "private_authenticated_delivery": 0.0,
+                      "private_authenticated_delivery": 100.0,
                       "daily_readme_synchroniser": 100.0,
                   },
               },
