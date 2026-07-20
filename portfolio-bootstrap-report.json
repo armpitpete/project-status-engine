@@ -4,9 +4,16 @@
     "opened_pr": 5,
     "unchanged": 3
   },
-  "codes": {
-    "insufficient_authority": 42
+  "exceptions": {
+    "ambiguous_project_type": 0,
+    "contradictory_evidence": 0,
+    "inactive_repository_candidate": 0,
+    "missing_authoritative_source": 0,
+    "missing_completion_contract": 0,
+    "missing_readme_marker": 0,
+    "no_completion_evidence": 42
   },
+  "failures": {},
   "inventory": 50,
   "inventory_sources": {
     "authenticated": 50,
@@ -15,7 +22,8 @@
   },
   "minimum_inventory": 49,
   "mode": "apply",
-  "schema_version": 1,
+  "registry_schema_version": 1,
+  "schema_version": 2,
   "source_sha": "431e5831c6ad1f7711d188e10fc66558ff56824c",
   "status": "complete"
 }
