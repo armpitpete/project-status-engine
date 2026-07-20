@@ -83,9 +83,14 @@ class InternalCompletionTests(unittest.TestCase):
         self.assertEqual(data["repository_count"], 6)
         self.assertEqual(data["completion_summary"]["valid"], 6)
         self.assertEqual(data["authority_exception_summary"]["total"], 1)
+        self.assertEqual(data["authority_exception_summary"]["owner_decision_required"], 1)
         self.assertEqual(
             data["authority_exception_queue"][0]["full_name"],
             "owner/private-project-5",
+        )
+        self.assertEqual(
+            data["authority_exception_queue"][0]["resolution_lane"],
+            "bounded_evidence_authoring",
         )
 
         by_name = {item["full_name"]: item for item in data["repositories"]}
@@ -143,9 +148,11 @@ class InternalCompletionTests(unittest.TestCase):
                 self.assertEqual(target, root / "internal-build" / "completion-status.json")
                 self.assertTrue(target.is_file())
                 self.assertTrue((root / "private-build" / "authority-exceptions.md").is_file())
+                self.assertTrue((root / "private-build" / "authority-resolution-templates.md").is_file())
                 self.assertFalse((root / "public" / "internal-build").exists())
                 self.assertFalse((root / "public" / "completion-status.json").exists())
                 self.assertFalse((root / "public" / "authority-exceptions.md").exists())
+                self.assertFalse((root / "public" / "authority-resolution-templates.md").exists())
 
                 public_text = "\n".join(
                     path.read_text(encoding="utf-8")
@@ -157,6 +164,8 @@ class InternalCompletionTests(unittest.TestCase):
                 self.assertNotIn("SECRET_AUTHORITY_1", public_text)
                 self.assertNotIn("Private authority detail 5", public_text)
                 self.assertNotIn("no_completion_evidence", public_text)
+                self.assertNotIn("bounded_evidence_authoring", public_text)
+                self.assertNotIn("[completed] of [total] complete", public_text)
                 self.assertIn("Private project #", public_text)
 
                 private_text = "\n".join(
@@ -166,6 +175,8 @@ class InternalCompletionTests(unittest.TestCase):
                 )
                 self.assertIn("owner/private-project-5", private_text)
                 self.assertIn("Private authority detail 5", private_text)
+                self.assertIn("bounded_evidence_authoring", private_text)
+                self.assertIn("[completed] of [total] complete", private_text)
 
                 written = json.loads(target.read_text(encoding="utf-8"))
                 internal_text = json.dumps(written)
@@ -173,6 +184,7 @@ class InternalCompletionTests(unittest.TestCase):
                 self.assertIn("owner/private-project-5", internal_text)
                 self.assertIn("SECRET_AUTHORITY_1", internal_text)
                 self.assertIn("Private authority detail 5", internal_text)
+                self.assertIn("bounded_evidence_authoring", internal_text)
         finally:
             dual.PUBLIC_OUT_DIR = original_public
             dual.PRIVATE_OUT_DIR = original_private
