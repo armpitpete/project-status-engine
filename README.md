@@ -1,33 +1,19 @@
 # Project Status Engine
 
-Automatic activity and completion reporting for repositories owned by `armpitpete`.
+Automatic activity and authority-backed completion reporting for repositories owned by `armpitpete`.
 
 ## Core rule
 
-This must not become a manual dashboard or an inference engine.
+This is not a manual dashboard and not an inference engine.
 
-It has two separate evidence channels:
+- **Activity and attention** come from GitHub repositories, issues, pull requests, labels, commits and push recency.
+- **Completion** comes only from a validated `.project/progress.json` committed inside each repository.
 
-1. **Activity and attention** come from GitHub repositories, issues, pull requests, labels, commits and push recency.
-2. **Completion percentages** come only from a validated `.project/progress.json` file committed inside each repository.
-
-Generated files are outputs. Do not maintain generated status by hand.
-
-Repository activity is never treated as completion. A busy repository may be 10% complete; a quiet repository may be finished.
+Generated files are outputs. Repository activity is never treated as completion.
 
 ## Completion authority
 
-The engine looks for this path in every discovered repository:
-
-```text
-.project/progress.json
-```
-
-A missing file means **completion not configured**. It does not mean 0%.
-
-An invalid file is reported as invalid. The engine does not repair it, choose new totals, adjust weights or guess project state.
-
-### Required fields
+The engine looks for `.project/progress.json` in each discovered repository. A missing file means **completion not configured**, not 0%. An invalid file remains invalid. The engine does not repair authority, choose totals or estimate progress.
 
 ```json
 {
@@ -44,165 +30,156 @@ An invalid file is reported as invalid. The engine does not repair it, choose ne
 }
 ```
 
-Rules:
+Stage percentages are calculated automatically. An overall percentage is absent unless it is explicitly enabled and every stage has an authorised weight totalling 100.
 
-- `authority` identifies the human-approved repository record supporting the figures;
-- stage IDs must be unique lowercase identifiers;
-- `completed` and `total` must be integers;
-- `total` must be greater than zero;
-- `completed` cannot exceed `total`;
-- stage percentages are calculated automatically;
-- an overall percentage is absent by default;
-- an overall percentage is calculated only when `overall.enabled` is `true`, every stage has a weight, and weights total exactly 100.
+See `schema/progress.schema.json` and `examples/progress.example.json`.
 
-See:
-
-- `schema/progress.schema.json`
-- `examples/progress.example.json`
-
-## Three states kept separate
-
-The engine must keep these concepts distinct:
+## Three separate concepts
 
 | Concept | Meaning | Source |
 |---|---|---|
-| Activity | How much recent repository work is happening | GitHub events and metadata |
-| Completion | How much declared scoped work is complete | `.project/progress.json` |
-| Readiness or authority | Whether a manuscript, build, release or print package is approved | Project-specific authority records |
+| Activity | Recent repository work and attention | GitHub metadata |
+| Completion | Declared scoped work completed | `.project/progress.json` |
+| Readiness | Approval to publish, release, print or deploy | Project-specific authority |
 
-A high completion percentage does not automatically mean ready, authoritative, releasable, print-ready or published.
+Completion does not imply readiness.
 
-## Three outputs, one engine
+## One scan, three outputs
 
-The engine performs one automatic repository scan and one activity-ranking pass, then derives two dashboard views and one trusted internal dataset. Completion data does not affect activity ranking.
+One paginated repository scan and one deterministic activity-ranking pass produce:
 
-### Public surface
+1. a public all-repository view;
+2. a private top-five owner dashboard;
+3. a trusted full-owner completion dataset.
 
-The public GitHub Pages site shows the full discovered repository pool. The number of repositories is discovered at runtime and must not be maintained as a hard-coded portfolio count.
+Completion data never affects activity ranking.
 
-- public repositories may show public names, links, issues, PRs and validated completion data;
-- private repositories remain anonymous and completion data is redacted;
-- public counts, filters, heat-map rows, Markdown and JSON reflect the full public-safe candidate pool;
-- the public site is a portfolio/activity surface, not the owner control dashboard.
+### Public view
+
+The public Pages output shows the full discovered pool. Public repositories retain public detail. Private repositories become anonymous placeholders with issues, PRs, commits, completion and authority data removed.
 
 ### Private owner dashboard
 
-The private owner view contains only the five busiest repositories from the same ranking result.
+The authenticated owner surface contains the five busiest repositories and is divided into focused pages:
 
-- real repository names are preserved for public and private repositories;
-- issue, PR, commit and completion context is preserved;
-- `Do Next` is derived only from those same five repositories and may include private work;
-- this output must be served only behind real authentication.
+- `index.html` — compact overview with data health, **Do Next**, project shape, heat map and exception summary;
+- `projects.html` — detailed top-five issue, PR and activity context;
+- `completion.html` — validated completion detail;
+- `exceptions.html` — complete owner-only exception queue and evidence;
+- `operations.html` — freshness, scan health and generated report links.
 
-The workflow generates the private view into `private-build/` without placing it in the public Pages artifact. On non-pull-request runs with private deployment enabled, it deploys that directory through a dedicated Ed25519 credential and pinned host key to `https://command.vaelinya.uk/private/project-status-engine/`, then verifies that anonymous access remains blocked by Cloudflare Access. Main run `29748153645` on merge commit `01c2a7ec1913a0119c4a49f1d3c4376325634bb6` passed generation, separation, deployment and anonymous-access validation; authenticated owner review on 2026-07-20 confirmed the live top-five dashboard, current `Do Next` items and private completion/authority sections.
+The private build is deployed separately from Pages and anonymous access is checked after deployment.
 
-### Internal full-owner completion dataset
+### Trusted internal dataset
 
-The trusted internal dataset contains every discovered repository, including private repository identity and validated completion data. It is deliberately minimal:
+`internal-build/completion-status.json` contains every discovered repository's identity, validated completion and authority exception. It excludes activity items and dashboard actions. It remains inside the trusted workflow and is consumed by the README synchroniser.
 
-- repository name and full name;
-- privacy flag;
-- repository URL;
-- validated completion authority and calculated stages.
+## Generated files
 
-It excludes issues, pull requests, commits, activity details and dashboard actions. The daily README synchroniser consumes this dataset inside the trusted workflow before runner cleanup.
+Public `public/`:
 
-The dataset is written to `internal-build/completion-status.json`. It is not a dashboard, is never placed under `public/`, and is never included in the GitHub Pages artifact.
+- `index.html`
+- `status.json`
+- `project-status.md`
+- `completion-status.md`
+- `home-pc-tasks.md`
 
-## What it generates
+Private `private-build/`:
 
-Public output in `public/`:
+- five HTML routes;
+- private JSON and Markdown reports;
+- exception report and resolution templates;
+- home-machine task report.
 
-- `index.html` — public all-repository activity and completion surface;
-- `status.json` — public-safe machine-readable activity and completion data;
-- `project-status.md` — public-safe activity report;
-- `completion-status.md` — public-safe completion report;
-- `home-pc-tasks.md` — public tasks found through the `home-pc` label.
+Trusted `internal-build/`:
 
-Private build output in `private-build/`:
+- `completion-status.json`.
 
-- `index.html` — private top-five owner dashboard;
-- `status.json` — unredacted top-five activity and completion data;
-- `project-status.md` — private top-five activity report;
-- `completion-status.md` — private top-five completion report;
-- `home-pc-tasks.md` — top-five owner tasks labelled `home-pc`.
+Only `public/` is uploaded to GitHub Pages.
 
-Trusted internal output in `internal-build/`:
+## Versioned activity ranking
 
-- `completion-status.json` — unredacted completion data for every discovered repository, intended for internal machine consumers.
+`config/activity-score.json` records the score version, caps, label weights and recency bands. Current work dominates stale backlog. Completion percentages do not affect ranking.
 
-`private-build/` and `internal-build/` are not committed and are not included in the public Pages artifact.
+Fixture tests cover active implementation, stale backlog, privacy, bounded top-five selection and two-page repository discovery.
 
-## Activity ranking
+## Discovery and scan health
 
-Ranking deliberately gives more weight to current work than stale backlog. The score uses:
+Discovery supports authenticated repositories across visibility levels, follows bounded pagination and applies bounded retry to transient API failures.
 
-- recent commits by the configured owner;
-- repository push recency;
-- latest commit recency;
-- recently updated pull requests;
-- recently updated issues;
-- open PRs and workflow labels as secondary attention signals;
-- old open issue count only as a small signal.
+Generated JSON includes:
 
-The default activity window is 30 days. Completion percentages do not affect ranking.
+- output schema version;
+- activity-score version;
+- generation time;
+- complete or partial scan state;
+- source repository count;
+- request and failure counts;
+- rate-limit metadata when available.
 
-## Repository discovery
+A partial scan is reported as partial rather than presented as a complete inventory.
 
-Without `PROJECT_STATUS_TOKEN`, the workflow safely falls back to public owner repositories.
+## Privacy and generated-output validation
 
-With `PROJECT_STATUS_TOKEN`, the engine discovers repositories owned by the authenticated user across all visibility levels. The workflow repository's default `GITHUB_TOKEN` is not assumed to have access to other private repositories.
+`scripts/validate_generated_outputs.py` is the executable validation contract. It verifies:
 
-The workflow scans up to 100 owner repositories so the current complete pool can be represented without a manual allowlist.
+- required public, private and internal files;
+- output schema and health metadata;
+- strict runtime completion-authority equality;
+- identity-free `all-valid` README policy resolution;
+- complete private and internal exception queues;
+- structural private-record redaction in every public output;
+- compact private navigation and detailed secondary pages.
 
-## Public privacy rule
+Validation is implemented once in Python rather than duplicated inside workflow YAML.
 
-The public Pages deployment must not reveal:
+## README synchronisation
 
-- private repository names or URLs;
-- private issue or PR titles and URLs;
-- private commit messages or URLs;
-- private progress stages, percentages, authority paths or validation errors.
+The daily synchroniser selects every valid completion record through `config/readme-sync-policy.json`. It updates only explicit marker blocks on `automation/readme-sync` and opens or updates a reviewable pull request. It never writes directly to a default branch.
 
-Private scan errors are also redacted.
+The original three contract shapes now live only at `tests/fixtures/readme-sync-contract-shapes.json`; they are regression fixtures, not production configuration.
 
-The workflow tests public output for private-data leakage. Only `public/` is passed to `actions/upload-pages-artifact`; neither `private-build/` nor `internal-build/` is uploaded.
+See `docs/README_SYNCHRONISER.md`.
 
-## How it runs
+## Schedule
 
 The status workflow runs:
 
-- manually through Actions;
-- every 15 minutes for the existing activity surface;
-- after pushes to `main`;
-- on pull requests for validation, without deployment.
+- manually;
+- hourly at minute 17;
+- on pushes to `main`;
+- on pull requests for validation only.
 
-Before generation, the status workflow runs deterministic standard-library tests. It then generates all three outputs, validates their separation, verifies the permanent three-pilot regression contracts, scans public files for private pilot identity and completion details, and uploads only `public/` to GitHub Pages.
+The synchroniser runs daily at 05:17 in `Europe/London` and can also be invoked manually.
 
-The separate README synchroniser workflow runs daily at 05:17 in `Europe/London` and can also be invoked manually. It consumes `internal-build/completion-status.json`, selects every valid completion contract through the identity-free `all-valid` policy, updates only explicit marker blocks on `automation/readme-sync`, and opens or updates ready-for-review pull requests. Pull-request and ordinary push events run validation only and perform no cross-repository write.
+## Operations
 
-The complete synchroniser contract is recorded in `docs/README_SYNCHRONISER.md`.
+Private deployment preserves the existing authentication, dedicated-key, pinned-host and exact-target controls. Recovery and rotation procedures are recorded in:
+
+- `docs/PRIVATE_DASHBOARD_DEPLOYMENT.md`
+- `docs/OPERATIONS.md`
+- `docs/OUTPUT_SCHEMAS.md`
+- `docs/V1_1_CONTRACT.md`
 
 ## Configuration
 
-Environment variables:
+- `STATUS_OWNER`
+- `STATUS_MAX_REPOS`
+- `STATUS_MAX_ITEMS`
+- `STATUS_PROJECT_LIMIT`
+- `STATUS_ACTIVITY_WINDOW_DAYS`
+- `STATUS_API_RETRIES`
+- `STATUS_PROGRESS_PATH`
+- `STATUS_OUT_DIR`
+- `PRIVATE_STATUS_OUT_DIR`
+- `INTERNAL_STATUS_OUT_DIR`
+- `PROJECT_STATUS_TOKEN`
+- `README_SYNC_TOKEN`
+- `GITHUB_TOKEN`
 
-- `STATUS_OWNER` — GitHub owner login;
-- `STATUS_MAX_REPOS` — candidate repositories to inspect, workflow value `100`;
-- `STATUS_MAX_ITEMS` — open issues and PRs read per repository, default `8`;
-- `STATUS_PROJECT_LIMIT` — private owner dashboard size, default `5`;
-- `STATUS_ACTIVITY_WINDOW_DAYS` — recent-activity window, default `30`;
-- `STATUS_PROGRESS_PATH` — repository-relative completion authority path, default `.project/progress.json`;
-- `STATUS_OUT_DIR` — public generated output directory, default `public`;
-- `PRIVATE_STATUS_OUT_DIR` — private generated output directory, default `private-build`;
-- `INTERNAL_STATUS_OUT_DIR` — trusted full-owner completion output directory, default `internal-build`;
-- `PROJECT_STATUS_TOKEN` — optional token for authenticated cross-repository discovery;
-- `README_SYNC_TOKEN` — dedicated token for owner-wide README branch and pull-request writes;
-- `GITHUB_TOKEN` — API token used for public fallback and standard workflow access.
+## Workflow labels
 
-## Labels the activity engine understands
-
-The engine still runs without these labels, but they add secondary attention signals:
+These labels add secondary attention signals but never affect completion:
 
 - `next`
 - `home-pc`
@@ -211,24 +188,6 @@ The engine still runs without these labels, but they add secondary attention sig
 - `review`
 - `safe-to-continue`
 - `move-to-new-chat`
-
-Labels do not affect completion percentages.
-
-## Current scope
-
-- automatic owner-repository discovery;
-- one shared scan and activity-ranking pass;
-- validated stage completion from `.project/progress.json`;
-- optional explicit weighted overall completion;
-- public all-repository privacy-safe surface;
-- private unredacted top-five owner dashboard build;
-- trusted unredacted full-owner completion dataset;
-- explicit public-leakage validation;
-- daily authority-backed README synchronisation for every valid project contract;
-- recent-activity ranking rather than stale-backlog ranking;
-- archived repositories and forks ignored;
-- GitHub Pages deployment for the public surface only;
-- authenticated private hosting at `https://command.vaelinya.uk/private/project-status-engine/` behind Cloudflare Access.
 
 <!-- AUTO:PROJECT-COMPLETION:START -->
 ## Completion

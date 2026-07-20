@@ -11,131 +11,103 @@ Remote directory: /home/vaelinya/public_html/private/project-status-engine/
 Owner URL: https://command.vaelinya.uk/private/project-status-engine/
 ```
 
-The URL must remain protected by the existing Cloudflare Access policy. The deployment workflow verifies that an anonymous request is rejected or redirected away from the protected application origin.
+The URL must remain protected by Cloudflare Access. The workflow verifies that an anonymous request is rejected or redirected away from the protected application origin.
 
 ## Required GitHub configuration
 
-Create these repository Actions secrets:
+Repository Actions secrets:
 
-- `PRIVATE_STATUS_DEPLOY_KEY` — a dedicated unencrypted Ed25519 private key used only for this deployment;
-- `PRIVATE_STATUS_KNOWN_HOSTS` — the pinned known-hosts entry for `server.vaelinya.uk`, obtained and verified through a trusted administrative channel.
+- `PRIVATE_STATUS_DEPLOY_KEY` — dedicated unencrypted Ed25519 key for this deployment only;
+- `PRIVATE_STATUS_KNOWN_HOSTS` — independently verified pinned known-hosts entry.
 
-Create this repository Actions variable only after the server key, target permissions and secrets are ready:
+Repository Actions variable:
 
 ```text
 PRIVATE_STATUS_DEPLOY_ENABLED=true
 ```
 
-When the variable is absent or not exactly `true`, private deployment is skipped. Public generation and GitHub Pages deployment continue normally.
+When the variable is absent or not exactly `true`, private deployment is skipped while public generation continues.
 
-## Bounded provisioning path
+## Provisioning boundary
 
-The repository includes two operator scripts. They prepare the required credential and server target but do not modify GitHub secrets, enable deployment or assert that a host key is trusted.
-
-### 1. Create the dedicated key on Windows
-
-From a trusted local checkout in PowerShell:
+Use:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\prepare_private_deploy_credentials.ps1
 ```
 
-The script:
+The script creates a dedicated key under `$HOME\.project-status-engine-private-deploy`, refuses accidental replacement, prints only public fingerprint and paths, and never prints private-key contents.
 
-- requires the Windows OpenSSH `ssh-keygen` command;
-- creates a dedicated Ed25519 key under `$HOME\.project-status-engine-private-deploy`;
-- refuses to overwrite an existing credential unless `-Force` is explicitly supplied;
-- prints the public-key fingerprint and file locations;
-- does not print the private-key contents;
-- writes a local provisioning manifest containing the remaining steps.
-
-Use the generated `.pub` file on the server. Store the complete private-key file as `PRIVATE_STATUS_DEPLOY_KEY`. Do not commit either generated key.
-
-### 2. Provision the exact server target
-
-Copy only the public key and `scripts/provision_private_dashboard_target.sh` to a trusted administrative session on the server. Then run:
+Install only the generated public key through a trusted server session:
 
 ```bash
 sudo bash scripts/provision_private_dashboard_target.sh /path/to/project-status-engine-private-deploy-ed25519.pub
 ```
 
-The script fails closed unless:
+Provisioning fails closed unless:
 
-- it is run through root or `sudo`;
-- the `vaelinya` account exists with home `/home/vaelinya`;
+- it runs through root or `sudo`;
+- account `vaelinya` exists with home `/home/vaelinya`;
 - `/home/vaelinya/public_html/private` already exists;
 - the supplied file contains exactly one Ed25519 public key.
 
-It installs the key with forwarding, PTY and user-RC restrictions, creates only the exact project target, verifies that `vaelinya` can write it, prints trusted-console host-key fingerprints and emits a candidate Ed25519 known-hosts line.
+The candidate host-key line printed by the script is not authority by itself. Verify the Ed25519 fingerprint through an independent trusted channel before storing it.
 
-The candidate line is not authority by itself. Compare its fingerprint through an independent trusted channel before storing it as `PRIVATE_STATUS_KNOWN_HOSTS`.
+## Credential and permission controls
 
-## Server preparation boundary
+- generate the key outside GitHub Actions;
+- never reuse a personal interactive key;
+- never configure an SSH password in the workflow;
+- retain forwarding, PTY and user-RC restrictions on the authorised key;
+- grant write/delete access only inside the exact dashboard target;
+- retain strict host-key checking and the pinned workflow known-hosts file.
 
-Generate the dedicated key pair outside GitHub Actions. Install only the public key in the `vaelinya` account's `authorized_keys`. Do not reuse a personal interactive key and do not configure an SSH password in the workflow.
-
-The `vaelinya` account must be able to:
-
-- create and write `/home/vaelinya/public_html/private/project-status-engine/`;
-- delete obsolete files inside that exact directory during synchronisation;
-- read back the deployed `index.html` and `status.json` for post-deploy validation.
-
-Do not grant broader privileges than required. The workflow refuses any host, user or target path that differs from the committed values.
-
-## Host-key pinning
-
-`PRIVATE_STATUS_KNOWN_HOSTS` is consumed as the only workflow known-hosts file. SSH runs with:
-
-```text
-StrictHostKeyChecking=yes
-UserKnownHostsFile=<pinned workflow file>
-BatchMode=yes
-IdentitiesOnly=yes
-```
-
-Do not generate and trust a fresh host key inside the deployment job. Verify the server fingerprint independently before saving the known-hosts entry.
+The workflow refuses a host, user or target path that differs from the committed values.
 
 ## Deployment behaviour
 
-Deployment runs only for non-pull-request workflow events and only when `PRIVATE_STATUS_DEPLOY_ENABLED` is `true`.
+Deployment runs only for non-pull-request events and only when private deployment is enabled.
 
 The workflow:
 
-1. builds public, private and trusted internal outputs from one scan;
-2. validates public/private separation;
-3. writes the dedicated key and pinned known-hosts entry into the runner's temporary directory;
-4. validates the exact SSH host, user and target;
-5. uses `rsync --delete --checksum` so the remote directory exactly mirrors `private-build/`;
-6. checks that the deployed private `index.html` and `status.json` are non-empty and that the JSON identifies the private view;
-7. checks that anonymous web access remains blocked;
-8. uploads only `public/` to GitHub Pages.
+1. generates public, private and internal outputs from one scan;
+2. validates output schemas and public/private separation;
+3. creates temporary runner credential files with restrictive permissions;
+4. validates the exact host, user and target;
+5. mirrors `private-build/` with `rsync --delete --checksum`;
+6. verifies deployed `index.html` and `status.json`;
+7. verifies anonymous access remains blocked;
+8. uploads only `public/` to Pages.
 
-`private-build/` is never uploaded as a Pages artifact or general Actions artifact.
+`private-build/` is never uploaded as a Pages or general Actions artifact.
 
 ## Required private files
 
-Deployment fails closed unless these generated files exist and are non-empty:
+Deployment fails closed unless the generated owner package contains its required reports. The generated-output validator additionally requires these five non-empty HTML routes:
 
-- `index.html`;
-- `status.json`;
-- `project-status.md`;
-- `completion-status.md`;
-- `authority-exceptions.md`;
-- `authority-resolution-templates.md`.
+- `index.html`
+- `projects.html`
+- `completion.html`
+- `exceptions.html`
+- `operations.html`
+
+It also requires:
+
+- `status.json`
+- `project-status.md`
+- `completion-status.md`
+- `authority-exceptions.md`
+- `authority-resolution-templates.md`
+- `home-pc-tasks.md`
 
 ## Operational acceptance
 
-After provisioning the server and creating both secrets:
+1. enable private deployment;
+2. run `Generate project status` on `main`;
+3. require credential preparation, deployment and anonymous-access verification to pass;
+4. inspect the authenticated overview and all four secondary routes;
+5. confirm **Do Next** uses only the top five;
+6. confirm detailed completion and exceptions are absent from the overview but present on their dedicated pages;
+7. confirm the public Pages output contains no private identity or exception material.
 
-1. create repository Actions variable `PRIVATE_STATUS_DEPLOY_ENABLED=true`;
-2. run `Generate project status` manually on `main` or allow the next scheduled run;
-3. verify that the credential preparation, private deployment and anonymous-access verification steps pass.
-
-Acceptance requires:
-
-- the exact remote directory contains the current private build;
-- the authenticated URL shows real repository identities, the private top five, private `Do Next`, the owner-wide exception queue and resolution templates;
-- an unauthenticated request remains blocked by Cloudflare Access;
-- the public Pages artifact contains no private repository identity or authority-exception material.
-
-Do not declare authenticated private delivery complete until this live proof has passed.
+Do not declare authenticated private delivery complete until this live proof has passed. Rotation, incident and recovery procedures are in `docs/OPERATIONS.md`.

@@ -26,7 +26,7 @@ config/readme-sync-policy.json
 
 `mode: all-valid` selects every discovered active repository whose internal completion record has state `valid`. Repository names and URLs are never committed to the policy or generated allowlist; targets are represented only by SHA-256 identifiers inside the trusted runner.
 
-The original three contract-shaped selectors remain in `config/readme-sync-pilots.json` as permanent regression fixtures. They are no longer the production target allowlist.
+The original three contract-shaped selectors now live at `tests/fixtures/readme-sync-contract-shapes.json`. They are test-only regression fixtures and are not production configuration or an allowlist.
 
 Repositories without a valid `.project/progress.json` are not assigned 0%, estimated, or written. They remain outside the synchroniser until a human-approved authority contract exists. A newly valid repository joins the target set automatically on the next run.
 
@@ -80,7 +80,7 @@ Repositories whose completion state is not valid are excluded before the write b
 ## Privacy and credential controls
 
 - repository identities are resolved only inside the trusted runner;
-- the committed rollout policy and regression fixtures contain no repository identity;
+- the committed rollout policy and test fixtures contain no repository identity;
 - logs contain only fixed action names and opaque target digests;
 - API errors are reduced to fixed operation/status codes;
 - tokens, URLs, response bodies, authority paths, stage labels and percentages are not logged;

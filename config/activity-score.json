@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "activity_score_version": "1.0",
+  "activity_window_days": 30,
+  "caps": {
+    "recent_commits": 20,
+    "recent_prs": 5,
+    "recent_issues": 10,
+    "open_prs": 3,
+    "stale_backlog": 8
+  },
+  "points": {
+    "recent_commit": 30,
+    "recent_pr_update": 20,
+    "recent_issue_update": 8,
+    "open_pr_attention": 12,
+    "workflow_labels": {
+      "blocked": 18,
+      "review": 15,
+      "next": 12,
+      "home-pc": 8,
+      "waiting-user": 4,
+      "safe-to-continue": 2
+    }
+  },
+  "recency": {
+    "push": [[1, 120], [3, 90], [7, 60], [14, 35], [30, 15]],
+    "latest_commit": [[1, 80], [3, 60], [7, 40], [14, 20], [30, 10]]
+  }
+}

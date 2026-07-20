@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/project-status-engine/status-output.schema.json",
+  "title": "Project Status Engine generated status output",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "activity_score_version",
+    "view",
+    "generated_at",
+    "scan_state",
+    "source_repository_count",
+    "scan_health",
+    "project_count",
+    "projects"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "activity_score_version": {"type": "string", "minLength": 1},
+    "view": {"enum": ["public", "private", "internal-owner-completion"]},
+    "generated_at": {"type": "string", "minLength": 1},
+    "scan_state": {"enum": ["complete", "partial"]},
+    "source_repository_count": {"type": "integer", "minimum": 0},
+    "scan_health": {
+      "type": "object",
+      "required": ["request_count", "failure_count", "rate_limit_remaining", "rate_limit_limit", "rate_limit_reset_at"],
+      "properties": {
+        "request_count": {"type": "integer", "minimum": 0},
+        "failure_count": {"type": "integer", "minimum": 0},
+        "rate_limit_remaining": {"type": ["integer", "null"], "minimum": 0},
+        "rate_limit_limit": {"type": ["integer", "null"], "minimum": 0},
+        "rate_limit_reset_at": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "project_count": {"type": "integer", "minimum": 0},
+    "projects": {"type": "array"}
+  },
+  "additionalProperties": true
+}

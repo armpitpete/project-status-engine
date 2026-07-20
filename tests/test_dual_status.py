@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +20,13 @@ core = dual.core
 NOW = dt.datetime(2026, 7, 7, 12, 0, tzinfo=dt.timezone.utc)
 
 
-def issue(number: int, title: str, *, label: str | None = None, updated: str = "2026-07-07T10:00:00Z"):
+def issue(
+    number: int,
+    title: str,
+    *,
+    label: str | None = None,
+    updated: str = "2026-07-07T10:00:00Z",
+):
     labels = [] if label is None else [label]
     return {
         "number": number,
@@ -66,6 +73,7 @@ def project(name: str, score: int, *, private: bool = False, issues=None, prs=No
         "activity_score": score * 100,
         "activity_reason": "recent commit activity",
         "activity_components": {"recent_commits": score * 100},
+        "completion": dual.completion.not_configured(),
         "authority_exception": None,
     }
     value["filter_tags"] = core.project_tags(value)
@@ -74,8 +82,14 @@ def project(name: str, score: int, *, private: bool = False, issues=None, prs=No
 
 class DualViewTests(unittest.TestCase):
     def setUp(self):
+        core.reset_scan_health()
         self.ranked = [
-            project("private-alpha", 9, private=True, issues=[issue(1, "Private alpha next", label="next")]),
+            project(
+                "private-alpha",
+                9,
+                private=True,
+                issues=[issue(1, "Private alpha next", label="next")],
+            ),
             project("private-beta", 8, private=True, prs=[issue(2, "Private beta PR")]),
             project("public-gamma", 7, issues=[issue(3, "Public gamma issue")]),
             project("public-delta", 6),
@@ -93,8 +107,10 @@ class DualViewTests(unittest.TestCase):
     def test_public_view_contains_full_pool_and_redacts_private_details(self):
         data = dual.build_public_data(copy.deepcopy(self.ranked), [], NOW)
         self.assertEqual(data["project_count"], 7)
-        self.assertEqual(data["scanned_candidate_count"], 7)
-        self.assertEqual(len(data["projects"]), 7)
+        self.assertEqual(data["source_repository_count"], 7)
+        self.assertEqual(data["schema_version"], 1)
+        self.assertEqual(data["activity_score_version"], "1.0")
+        self.assertEqual(data["scan_state"], "complete")
         outputs = "\n".join(
             [
                 json.dumps(data),
@@ -121,32 +137,45 @@ class DualViewTests(unittest.TestCase):
         self.assertIn("Private project #1", outputs)
         self.assertIn("Private project #2", outputs)
         self.assertIn("Private project #5", outputs)
-        self.assertIn("All discovered repositories by recent activity.", outputs)
+        self.assertIn("Repositories ordered by recent activity.", outputs)
+        self.assertIn("Data health", outputs)
 
-    def test_private_view_contains_exact_real_top_five_and_full_exception_queue(self):
+    def test_private_overview_is_compact_and_detailed_exception_page_is_complete(self):
         data = dual.build_private_data(copy.deepcopy(self.ranked), [], NOW, limit=5)
         self.assertEqual(data["project_count"], 5)
-        self.assertEqual([item["full_name"] for item in data["projects"]], [
-            "owner/private-alpha",
-            "owner/private-beta",
-            "owner/public-gamma",
-            "owner/public-delta",
-            "owner/private-epsilon",
-        ])
+        self.assertEqual(
+            [item["full_name"] for item in data["projects"]],
+            [
+                "owner/private-alpha",
+                "owner/private-beta",
+                "owner/public-gamma",
+                "owner/public-delta",
+                "owner/private-epsilon",
+            ],
+        )
         self.assertEqual(
             [item["full_name"] for item in data["authority_exception_queue"]],
             ["owner/public-zeta", "owner/private-alpha"],
         )
         self.assertEqual(data["authority_exception_summary"]["total"], 2)
-        private_html = dual.render_private_html(data)
-        self.assertIn("owner/private-alpha", private_html)
-        self.assertIn("Private alpha next", private_html)
-        self.assertIn("owner/public-zeta", private_html)
-        self.assertIn("Public zeta owner-only detail", private_html)
-        self.assertNotIn("Private repository details are redacted", private_html)
+
+        overview = dual.render_private_html(data)
+        self.assertIn("owner/private-alpha", overview)
+        self.assertIn("Private alpha next", overview)
+        self.assertNotIn("owner/public-zeta", overview)
+        self.assertNotIn("Public zeta owner-only detail", overview)
+        self.assertIn("Open the complete exception queue", overview)
+        self.assertIn("aria-label='Owner dashboard'", overview)
+
+        exception_page = dual.render_private_exceptions_html(data)
+        self.assertIn("owner/public-zeta", exception_page)
+        self.assertIn("Public zeta owner-only detail", exception_page)
+        self.assertIn("owner/private-alpha", exception_page)
 
     def test_private_do_next_uses_only_top_five_and_can_include_private_projects(self):
-        outside = project("outside-top-five", 1, issues=[issue(99, "Outside action", label="blocked")])
+        outside = project(
+            "outside-top-five", 1, issues=[issue(99, "Outside action", label="blocked")]
+        )
         ranked = copy.deepcopy(self.ranked[:5] + [outside])
         data = dual.build_private_data(ranked, [], NOW, limit=5)
         priority_text = json.dumps(data["priority"])
@@ -158,17 +187,57 @@ class DualViewTests(unittest.TestCase):
 
     def test_public_and_private_views_share_same_ranking_result(self):
         public_data, private_data = dual.build_views(copy.deepcopy(self.ranked), [], NOW)
-        self.assertEqual(public_data["projects"][0]["activity_score"], private_data["projects"][0]["activity_score"])
-        self.assertEqual(public_data["projects"][4]["activity_score"], private_data["projects"][4]["activity_score"])
-        self.assertEqual(public_data["scanned_candidate_count"], private_data["scanned_candidate_count"])
+        self.assertEqual(
+            public_data["projects"][0]["activity_score"],
+            private_data["projects"][0]["activity_score"],
+        )
+        self.assertEqual(
+            public_data["projects"][4]["activity_score"],
+            private_data["projects"][4]["activity_score"],
+        )
+        self.assertEqual(
+            public_data["source_repository_count"],
+            private_data["source_repository_count"],
+        )
+
+    def test_private_writer_creates_compact_and_secondary_pages(self):
+        data = dual.build_private_data(copy.deepcopy(self.ranked), [], NOW, limit=5)
+        with tempfile.TemporaryDirectory() as temp:
+            original = dual.PRIVATE_OUT_DIR
+            dual.PRIVATE_OUT_DIR = Path(temp)
+            try:
+                dual.write_private_outputs(data)
+            finally:
+                dual.PRIVATE_OUT_DIR = original
+            for filename in (
+                "index.html",
+                "projects.html",
+                "completion.html",
+                "exceptions.html",
+                "operations.html",
+                "status.json",
+            ):
+                self.assertTrue((Path(temp) / filename).is_file(), filename)
+            self.assertNotIn(
+                "Public zeta owner-only detail",
+                (Path(temp) / "index.html").read_text(encoding="utf-8"),
+            )
+            self.assertIn(
+                "Public zeta owner-only detail",
+                (Path(temp) / "exceptions.html").read_text(encoding="utf-8"),
+            )
 
     def test_workflow_never_uploads_private_build_to_pages(self):
-        workflow = (ROOT / ".github" / "workflows" / "status.yml").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "status.yml").read_text(
+            encoding="utf-8"
+        )
         self.assertIn('STATUS_MAX_REPOS: "100"', workflow)
         self.assertIn("PRIVATE_STATUS_OUT_DIR: private-build", workflow)
         self.assertIn("path: public", workflow)
         self.assertNotIn("path: private-build", workflow)
         self.assertNotIn("path: private", workflow)
+        self.assertIn('cron: "17 * * * *"', workflow)
+        self.assertIn("python scripts/validate_generated_outputs.py", workflow)
 
 
 if __name__ == "__main__":
