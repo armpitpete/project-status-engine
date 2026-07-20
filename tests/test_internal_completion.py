@@ -34,6 +34,18 @@ def progress(authority: str, completed: int = 1, total: int = 2):
     )
 
 
+def exception(index: int):
+    return {
+        "code": "no_completion_evidence",
+        "project_type": "software",
+        "detail": f"Private authority detail {index}.",
+        "source_sha": f"{index:x}" * 40,
+        "source_branch": "automation/project-status-bootstrap-exception",
+        "source_path": ".project/bootstrap-exception.json",
+        "accepted_evidence": "Explicit completed and total counts are required.",
+    }
+
+
 def project(index: int, *, private: bool):
     name = f"private-project-{index}" if private else f"public-project-{index}"
     authority = f"docs/SECRET_AUTHORITY_{index}.md" if private else f"docs/PUBLIC_AUTHORITY_{index}.md"
@@ -55,6 +67,7 @@ def project(index: int, *, private: bool):
         "activity_reason": "recent commit activity",
         "activity_components": {"recent_commits": 100 - index},
         "completion": progress(authority),
+        "authority_exception": exception(index) if index == 5 else None,
     }
 
 
@@ -69,6 +82,11 @@ class InternalCompletionTests(unittest.TestCase):
         self.assertEqual(data["view"], "internal-owner-completion")
         self.assertEqual(data["repository_count"], 6)
         self.assertEqual(data["completion_summary"]["valid"], 6)
+        self.assertEqual(data["authority_exception_summary"]["total"], 1)
+        self.assertEqual(
+            data["authority_exception_queue"][0]["full_name"],
+            "owner/private-project-5",
+        )
 
         by_name = {item["full_name"]: item for item in data["repositories"]}
         private_record = by_name["owner/private-project-5"]
@@ -79,11 +97,15 @@ class InternalCompletionTests(unittest.TestCase):
         )
         self.assertEqual(private_record["completion"]["stages"][0]["percentage"], 50.0)
         self.assertEqual(
+            private_record["authority_exception"]["code"],
+            "no_completion_evidence",
+        )
+        self.assertEqual(
             set(private_record),
-            {"name", "full_name", "private", "url", "completion"},
+            {"name", "full_name", "private", "url", "completion", "authority_exception"},
         )
 
-    def test_existing_private_dashboard_remains_top_five(self):
+    def test_existing_private_dashboard_remains_top_five_but_queue_is_owner_wide(self):
         private_data = dual.build_private_data(self.ranked, [], NOW, limit=5)
         internal_data = internal.build_data(self.ranked, [], NOW)
         self.assertEqual(private_data["project_count"], 5)
@@ -95,6 +117,10 @@ class InternalCompletionTests(unittest.TestCase):
         self.assertIn(
             "owner/private-project-5",
             {item["full_name"] for item in internal_data["repositories"]},
+        )
+        self.assertIn(
+            "owner/private-project-5",
+            {item["full_name"] for item in private_data["authority_exception_queue"]},
         )
 
     def test_internal_output_is_separate_and_private_data_never_leaks_publicly(self):
@@ -116,8 +142,10 @@ class InternalCompletionTests(unittest.TestCase):
 
                 self.assertEqual(target, root / "internal-build" / "completion-status.json")
                 self.assertTrue(target.is_file())
+                self.assertTrue((root / "private-build" / "authority-exceptions.md").is_file())
                 self.assertFalse((root / "public" / "internal-build").exists())
                 self.assertFalse((root / "public" / "completion-status.json").exists())
+                self.assertFalse((root / "public" / "authority-exceptions.md").exists())
 
                 public_text = "\n".join(
                     path.read_text(encoding="utf-8")
@@ -125,13 +153,26 @@ class InternalCompletionTests(unittest.TestCase):
                     if path.is_file()
                 )
                 self.assertNotIn("owner/private-project-1", public_text)
+                self.assertNotIn("owner/private-project-5", public_text)
                 self.assertNotIn("SECRET_AUTHORITY_1", public_text)
+                self.assertNotIn("Private authority detail 5", public_text)
+                self.assertNotIn("no_completion_evidence", public_text)
                 self.assertIn("Private project #", public_text)
+
+                private_text = "\n".join(
+                    path.read_text(encoding="utf-8")
+                    for path in (root / "private-build").rglob("*")
+                    if path.is_file()
+                )
+                self.assertIn("owner/private-project-5", private_text)
+                self.assertIn("Private authority detail 5", private_text)
 
                 written = json.loads(target.read_text(encoding="utf-8"))
                 internal_text = json.dumps(written)
                 self.assertIn("owner/private-project-1", internal_text)
+                self.assertIn("owner/private-project-5", internal_text)
                 self.assertIn("SECRET_AUTHORITY_1", internal_text)
+                self.assertIn("Private authority detail 5", internal_text)
         finally:
             dual.PUBLIC_OUT_DIR = original_public
             dual.PRIVATE_OUT_DIR = original_private

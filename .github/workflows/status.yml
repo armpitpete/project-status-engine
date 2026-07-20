@@ -61,11 +61,13 @@ jobs:
           test -f private-build/index.html
           test -f private-build/status.json
           test -f private-build/completion-status.md
+          test -f private-build/authority-exceptions.md
           test -f internal-build/completion-status.json
           test ! -e public/private-build
           test ! -e public/private
           test ! -e public/internal-build
           test ! -e public/completion-status.json
+          test ! -e public/authority-exceptions.md
           python - <<'PY'
           import hashlib
           import json
@@ -76,8 +78,12 @@ jobs:
           import resolve_readme_pilots as resolver
 
           internal_path = Path("internal-build/completion-status.json")
+          private_path = Path("private-build/status.json")
+          public_path = Path("public/status.json")
           selector_path = Path("config/readme-sync-pilots.json")
           internal = json.loads(internal_path.read_text(encoding="utf-8"))
+          private = json.loads(private_path.read_text(encoding="utf-8"))
+          public = json.loads(public_path.read_text(encoding="utf-8"))
           selectors = resolver.load_selectors(selector_path)
           resolved = resolver.resolve(internal_path, selector_path)
 
@@ -133,6 +139,30 @@ jobs:
               assert completion["overall_percentage"] is None
               assert record["private"] is expectation["private"]
 
+          expected_queue = sorted(
+              item["full_name"]
+              for item in internal["repositories"]
+              if item.get("authority_exception")
+          )
+          internal_queue = sorted(
+              item["full_name"] for item in internal["authority_exception_queue"]
+          )
+          private_queue = sorted(
+              item["full_name"] for item in private["authority_exception_queue"]
+          )
+          assert internal_queue == expected_queue, (
+              len(internal_queue), len(expected_queue)
+          )
+          assert private_queue == expected_queue, (
+              len(private_queue), len(expected_queue)
+          )
+          assert internal["authority_exception_summary"]["total"] == len(expected_queue)
+          assert private["authority_exception_summary"]["total"] == len(expected_queue)
+
+          assert "authority_exception_queue" not in public
+          assert "authority_exception_summary" not in public
+          assert all("authority_exception" not in item for item in public["projects"])
+
           public_text = "\n".join(
               path.read_text(encoding="utf-8")
               for path in Path("public").rglob("*")
@@ -156,9 +186,22 @@ jobs:
                   if value:
                       assert value not in public_text
 
+          for record in internal["repositories"]:
+              exception = record.get("authority_exception")
+              if not exception or not record["private"]:
+                  continue
+              for value in (
+                  record["full_name"],
+                  record.get("url") or "",
+                  exception.get("detail") or "",
+                  exception.get("source_sha") or "",
+              ):
+                  if value:
+                      assert value not in public_text
+
           print(
-              "Verified three contract-selected pilots; public output contains no "
-              "private identity or completion detail."
+              "Verified three contract-selected pilots, owner-wide private exception queue, "
+              "and structural public output separation."
           )
           PY
 
