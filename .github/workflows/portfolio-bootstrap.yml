@@ -20,19 +20,23 @@ on:
       - main
     paths:
       - ".github/workflows/portfolio-bootstrap.yml"
+      - "config/portfolio-authority-registry.json"
       - "scripts/portfolio_bootstrap.py"
       - "scripts/portfolio_bootstrap_parts/**"
-      - "tests/test_portfolio_bootstrap.py"
-      - "docs/PORTFOLIO_BOOTSTRAP.md"
+      - "tests/test_portfolio_*.py"
+      - "docs/PORTFOLIO_*.md"
+      - "portfolio-bootstrap-report.json"
   push:
     branches:
       - main
     paths:
       - ".github/workflows/portfolio-bootstrap.yml"
+      - "config/portfolio-authority-registry.json"
       - "scripts/portfolio_bootstrap.py"
       - "scripts/portfolio_bootstrap_parts/**"
-      - "tests/test_portfolio_bootstrap.py"
-      - "docs/PORTFOLIO_BOOTSTRAP.md"
+      - "tests/test_portfolio_*.py"
+      - "docs/PORTFOLIO_*.md"
+      - "portfolio-bootstrap-report.json"
 
 permissions:
   contents: read
@@ -63,9 +67,10 @@ jobs:
           from pathlib import Path
 
           paths = [
+              Path("config/portfolio-authority-registry.json"),
               Path("scripts/portfolio_bootstrap.py"),
               *sorted(Path("scripts/portfolio_bootstrap_parts").glob("part*.inc")),
-              Path("docs/PORTFOLIO_BOOTSTRAP.md"),
+              *sorted(Path("docs").glob("PORTFOLIO_*.md")),
               Path(".github/workflows/portfolio-bootstrap.yml"),
           ]
           text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
