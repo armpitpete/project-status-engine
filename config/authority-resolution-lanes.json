@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "registry_type": "authority-resolution-policy",
+  "lanes": {
+    "missing_completion_contract": {
+      "resolution_lane": "completion_contract_repair",
+      "owner_decision_required": false,
+      "required_action": "Attempt the controlled contract-repair lane using existing explicit bounded authority evidence; request human authority only when the repair remains unresolved.",
+      "template_kind": "contract_repair_review"
+    },
+    "missing_authoritative_source": {
+      "resolution_lane": "authority_record_creation",
+      "owner_decision_required": true,
+      "required_action": "Create and approve one repository authority record that defines the bounded completion scope and records explicit completed and total counts.",
+      "template_kind": "new_authority_record"
+    },
+    "missing_readme_marker": {
+      "resolution_lane": "readme_marker_review",
+      "owner_decision_required": true,
+      "required_action": "Review the unsafe README marker structure and authorise one exact marker correction before rerunning the generated README repair lane.",
+      "template_kind": "readme_marker_decision"
+    },
+    "ambiguous_project_type": {
+      "resolution_lane": "project_type_decision",
+      "owner_decision_required": true,
+      "required_action": "Select one authoritative project type or explicitly classify the repository as mixed before any completion contract is generated.",
+      "template_kind": "project_type_decision"
+    },
+    "contradictory_evidence": {
+      "resolution_lane": "evidence_reconciliation",
+      "owner_decision_required": true,
+      "required_action": "Reconcile the conflicting authority statements and approve one bounded completed-and-total record; automation must not choose between them.",
+      "template_kind": "evidence_reconciliation"
+    },
+    "no_completion_evidence": {
+      "resolution_lane": "bounded_evidence_authoring",
+      "owner_decision_required": true,
+      "required_action": "Add explicit completed and total counts to one existing authority or status record without deriving them from activity, files or percentages alone.",
+      "template_kind": "bounded_evidence_addition"
+    },
+    "inactive_repository_candidate": {
+      "resolution_lane": "repository_lifecycle_decision",
+      "owner_decision_required": true,
+      "required_action": "Decide whether the repository is active, should be archived, or should remain excluded before completion onboarding.",
+      "template_kind": "repository_lifecycle_decision"
+    }
+  }
+}
