@@ -255,6 +255,7 @@ def write_private_outputs(data: dict[str, Any]) -> None:
     (PRIVATE_OUT_DIR / "project-status.md").write_text(core.render_project_markdown(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "completion-status.md").write_text(completion.render_markdown(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "authority-exceptions.md").write_text(exceptions.render_markdown(data), encoding="utf-8")
+    (PRIVATE_OUT_DIR / "authority-resolution-templates.md").write_text(exceptions.render_resolution_templates(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "home-pc-tasks.md").write_text(owner_home_markdown(data), encoding="utf-8")
 
 
