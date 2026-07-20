@@ -51,12 +51,6 @@ Repository exception branches use schema version 2 and record only one registere
 
 ## Approved bootstrap convergence proof
 
-On 2026-07-20 the exact five-PR authority-backed bootstrap set was revalidated and merged:
+On 2026-07-20 the exact five-PR authority-backed bootstrap set identified by the preceding aggregate report was revalidated and merged as one controlled set.
 
-- `diary-of-sound` PR #56;
-- `curious-world-of-ellie-morcant` PR #135;
-- `book-system-os` PR #29;
-- `mutual-love` PR #5;
-- `merrin-ecosystem` PR #2.
-
-The next owner-wide apply run must classify those five repositories as `unchanged`, must not create replacement branches or pull requests, and must preserve the 50-repository inventory. This record exists only to trigger and anchor that convergence proof; it changes no completion authority rule.
+The next owner-wide apply run must classify those five repositories as `unchanged`, must not create replacement branches or pull requests, and must preserve the 50-repository inventory. This identity-free record exists only to trigger and anchor that convergence proof; it changes no completion authority rule.
