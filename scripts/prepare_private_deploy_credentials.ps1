@@ -43,9 +43,23 @@ if ($Force) {
     }
 }
 
-& $sshKeygen.Source -t ed25519 -N "" -C $KeyComment -f $keyPath
-if ($LASTEXITCODE -ne 0) {
-    Stop-WithError "ssh-keygen failed with exit code $LASTEXITCODE."
+# Windows PowerShell 5.1 drops an unquoted empty native-command argument.
+# Start-Process receives an explicit pair of quote characters so ssh-keygen
+# parses -N as an empty passphrase rather than consuming the following flag.
+$sshKeygenArguments = @(
+    "-t", "ed25519",
+    "-N", '""',
+    "-C", "`"$KeyComment`"",
+    "-f", "`"$keyPath`""
+)
+$keygenProcess = Start-Process `
+    -FilePath $sshKeygen.Source `
+    -ArgumentList $sshKeygenArguments `
+    -NoNewWindow `
+    -Wait `
+    -PassThru
+if ($keygenProcess.ExitCode -ne 0) {
+    Stop-WithError "ssh-keygen failed with exit code $($keygenProcess.ExitCode)."
 }
 
 if (-not (Test-Path -LiteralPath $keyPath) -or -not (Test-Path -LiteralPath $publicKeyPath)) {
