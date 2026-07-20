@@ -64,4 +64,5 @@ jobs:
           name: verified-pilot-reconciliation
           path: reconciliation
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 1
