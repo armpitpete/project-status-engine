@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import authority_exceptions as exceptions
 import completion_status as completion
 import live_status as core
 
@@ -47,7 +48,17 @@ def collect_ranked() -> tuple[list[dict[str, Any]], list[str], dt.datetime]:
             {"author": core.OWNER, "since": since, "per_page": 100},
         )
         progress, progress_error = completion.fetch_repository_progress(name, core.api_get)
-        for error in (issue_error, pr_error, latest_error, recent_error, progress_error):
+        authority_exception, exception_error = exceptions.fetch_repository_exception(
+            name, core.api_get
+        )
+        for error in (
+            issue_error,
+            pr_error,
+            latest_error,
+            recent_error,
+            progress_error,
+            exception_error,
+        ):
             if error:
                 errors.append(core.safe_error(private, name, error))
 
@@ -68,6 +79,7 @@ def collect_ranked() -> tuple[list[dict[str, Any]], list[str], dt.datetime]:
             "recent_commit_count": len(recent_raw or []),
             "status": core.project_status(issues, prs),
             "completion": progress,
+            "authority_exception": authority_exception,
         }
         project["filter_tags"] = core.project_tags(project)
         projects.append(project)
@@ -156,7 +168,7 @@ def build_private_data(
     now: dt.datetime,
     limit: int | None = None,
 ) -> dict[str, Any]:
-    """Owner view contains only the real, unredacted top repositories."""
+    """Owner view contains the top repositories plus the full private exception queue."""
     limit = core.PROJECT_LIMIT if limit is None else limit
     projects: list[dict[str, Any]] = []
     for rank, project in enumerate(ranked[: max(0, limit)], 1):
@@ -165,11 +177,20 @@ def build_private_data(
         projects.append(item)
     data = base_data(projects, len(ranked), errors, now, "private")
     data["priority"] = owner_priority(projects)
+    queue = exceptions.queue_for(ranked)
+    data["authority_exception_queue"] = queue
+    data["authority_exception_summary"] = exceptions.summary_for(queue)
     return data
 
 
 def _inject_completion(html_text: str, data: dict[str, Any]) -> str:
     section = completion.render_html(data)
+    marker = "</main>"
+    return html_text.replace(marker, f"{section}{marker}", 1)
+
+
+def _inject_authority_exceptions(html_text: str, data: dict[str, Any]) -> str:
+    section = exceptions.render_html(data)
     marker = "</main>"
     return html_text.replace(marker, f"{section}{marker}", 1)
 
@@ -200,7 +221,7 @@ def render_private_html(data: dict[str, Any]) -> str:
         .replace("public PRs", "PRs")
         .replace("No public priority items found.", "No priority items found.")
     )
-    return _inject_completion(html_text, data)
+    return _inject_authority_exceptions(_inject_completion(html_text, data), data)
 
 
 def owner_home_markdown(data: dict[str, Any]) -> str:
@@ -231,6 +252,7 @@ def write_private_outputs(data: dict[str, Any]) -> None:
     (PRIVATE_OUT_DIR / "index.html").write_text(render_private_html(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "project-status.md").write_text(core.render_project_markdown(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "completion-status.md").write_text(completion.render_markdown(data), encoding="utf-8")
+    (PRIVATE_OUT_DIR / "authority-exceptions.md").write_text(exceptions.render_markdown(data), encoding="utf-8")
     (PRIVATE_OUT_DIR / "home-pc-tasks.md").write_text(owner_home_markdown(data), encoding="utf-8")
 
 
