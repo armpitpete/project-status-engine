@@ -1,6 +1,9 @@
-name: Prepare private dashboard acceptance README
+name: Prepare private dashboard acceptance authority
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - authority/complete-private-dashboard-delivery
@@ -31,8 +34,8 @@ jobs:
           import completion_status
           import readme_sync
 
-          path = Path("README.md")
-          text = path.read_text(encoding="utf-8")
+          readme_path = Path("README.md")
+          text = readme_path.read_text(encoding="utf-8")
 
           old_delivery = (
               "The workflow currently generates the private view into `private-build/` on the ephemeral "
@@ -61,24 +64,37 @@ jobs:
               raise SystemExit("expected one stale scope item")
 
           text = text.replace(old_delivery, new_delivery).replace(old_scope, new_scope)
-          path.write_text(text, encoding="utf-8")
+          readme_path.write_text(text, encoding="utf-8")
 
           document = json.loads(Path(".project/progress.json").read_text(encoding="utf-8"))
           completion = completion_status.validate_progress(document)
-          desired = readme_sync.desired_readme(path.read_bytes(), completion)
-          path.write_bytes(desired)
+          readme_path.write_bytes(readme_sync.desired_readme(readme_path.read_bytes(), completion))
 
-          final = path.read_text(encoding="utf-8")
+          final = readme_path.read_text(encoding="utf-8")
           assert old_delivery not in final
           assert old_scope not in final
           assert "Authenticated private dashboard delivery | `1/1` — **100.0%**" in final
-          print("Prepared accepted private delivery authority and generated completion marker.")
+
+          workflow_path = Path(".github/workflows/status.yml")
+          workflow = workflow_path.read_text(encoding="utf-8")
+          old_expectation = '"private_authenticated_delivery": 0.0,'
+          new_expectation = '"private_authenticated_delivery": 100.0,'
+          if workflow.count(old_expectation) != 1:
+              raise SystemExit("expected one stale private-delivery pilot expectation")
+          workflow_path.write_text(
+              workflow.replace(old_expectation, new_expectation),
+              encoding="utf-8",
+          )
+
+          print("Prepared accepted private delivery authority and pilot validation.")
           PY
 
-      - name: Upload verified README
+      - name: Upload verified authority files
         uses: actions/upload-artifact@v4
         with:
-          name: accepted-private-dashboard-readme
-          path: README.md
+          name: accepted-private-dashboard-authority
+          path: |
+            README.md
+            .github/workflows/status.yml
           if-no-files-found: error
           retention-days: 1
