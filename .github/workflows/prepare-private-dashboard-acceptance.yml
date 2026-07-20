@@ -1,9 +1,6 @@
-name: Prepare private dashboard acceptance authority
+name: Apply private dashboard acceptance authority
 
 on:
-  pull_request:
-    branches:
-      - main
   push:
     branches:
       - authority/complete-private-dashboard-delivery
@@ -12,18 +9,22 @@ permissions:
   contents: read
 
 jobs:
-  prepare:
+  apply:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout exact authority branch
         uses: actions/checkout@v4
+        with:
+          ref: authority/complete-private-dashboard-delivery
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
-      - name: Apply accepted delivery authority and regenerate marker
+      - name: Apply accepted delivery authority
         run: |
           python - <<'PY'
           import json
@@ -36,7 +37,6 @@ jobs:
 
           readme_path = Path("README.md")
           text = readme_path.read_text(encoding="utf-8")
-
           old_delivery = (
               "The workflow currently generates the private view into `private-build/` on the ephemeral "
               "runner but does not upload it into the public Pages artifact. An authenticated deployment "
@@ -58,43 +58,57 @@ jobs:
               "`https://command.vaelinya.uk/private/project-status-engine/` behind Cloudflare Access."
           )
 
-          if text.count(old_delivery) != 1:
-              raise SystemExit("expected one stale delivery paragraph")
-          if text.count(old_scope) != 1:
-              raise SystemExit("expected one stale scope item")
+          if old_delivery in text:
+              if text.count(old_delivery) != 1:
+                  raise SystemExit("ambiguous stale delivery paragraph")
+              text = text.replace(old_delivery, new_delivery)
+          elif new_delivery not in text:
+              raise SystemExit("delivery authority paragraph missing")
 
-          text = text.replace(old_delivery, new_delivery).replace(old_scope, new_scope)
+          if old_scope in text:
+              if text.count(old_scope) != 1:
+                  raise SystemExit("ambiguous stale scope item")
+              text = text.replace(old_scope, new_scope)
+          elif new_scope not in text:
+              raise SystemExit("accepted scope item missing")
+
           readme_path.write_text(text, encoding="utf-8")
-
           document = json.loads(Path(".project/progress.json").read_text(encoding="utf-8"))
           completion = completion_status.validate_progress(document)
           readme_path.write_bytes(readme_sync.desired_readme(readme_path.read_bytes(), completion))
-
-          final = readme_path.read_text(encoding="utf-8")
-          assert old_delivery not in final
-          assert old_scope not in final
-          assert "Authenticated private dashboard delivery | `1/1` — **100.0%**" in final
 
           workflow_path = Path(".github/workflows/status.yml")
           workflow = workflow_path.read_text(encoding="utf-8")
           old_expectation = '"private_authenticated_delivery": 0.0,'
           new_expectation = '"private_authenticated_delivery": 100.0,'
-          if workflow.count(old_expectation) != 1:
-              raise SystemExit("expected one stale private-delivery pilot expectation")
-          workflow_path.write_text(
-              workflow.replace(old_expectation, new_expectation),
-              encoding="utf-8",
-          )
+          if old_expectation in workflow:
+              if workflow.count(old_expectation) != 1:
+                  raise SystemExit("ambiguous stale private-delivery expectation")
+              workflow = workflow.replace(old_expectation, new_expectation)
+          elif new_expectation not in workflow:
+              raise SystemExit("accepted private-delivery expectation missing")
+          workflow_path.write_text(workflow, encoding="utf-8")
 
-          print("Prepared accepted private delivery authority and pilot validation.")
+          final = readme_path.read_text(encoding="utf-8")
+          assert old_delivery not in final
+          assert old_scope not in final
+          assert "Authenticated private dashboard delivery | `1/1` — **100.0%**" in final
           PY
 
-      - name: Upload verified authority files
-        uses: actions/upload-artifact@v4
-        with:
-          name: accepted-private-dashboard-authority
-          path: |
-            README.md
-            .github/workflows/status.yml
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit only final authority files
+        env:
+          README_SYNC_TOKEN: ${{ secrets.README_SYNC_TOKEN }}
+        run: |
+          test -n "$README_SYNC_TOKEN"
+          git add README.md .github/workflows/status.yml
+          changed="$(git diff --cached --name-only)"
+          if [ -z "$changed" ]; then
+            echo "Authority files already applied."
+            exit 0
+          fi
+          test "$changed" = $'.github/workflows/status.yml\nREADME.md'
+          git config user.name "project-status-engine"
+          git config user.email "project-status-engine@users.noreply.github.com"
+          git commit -m "Record accepted private dashboard delivery"
+          git remote set-url origin "https://x-access-token:${README_SYNC_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:authority/complete-private-dashboard-delivery
