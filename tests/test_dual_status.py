@@ -30,6 +30,18 @@ def issue(number: int, title: str, *, label: str | None = None, updated: str = "
     }
 
 
+def exception(code: str, detail: str, sha: str):
+    return {
+        "code": code,
+        "project_type": "software",
+        "detail": detail,
+        "source_sha": sha,
+        "source_branch": "automation/project-status-bootstrap-exception",
+        "source_path": ".project/bootstrap-exception.json",
+        "accepted_evidence": "Explicit completed and total counts are required.",
+    }
+
+
 def project(name: str, score: int, *, private: bool = False, issues=None, prs=None):
     issues = list(issues or [])
     prs = list(prs or [])
@@ -54,6 +66,7 @@ def project(name: str, score: int, *, private: bool = False, issues=None, prs=No
         "activity_score": score * 100,
         "activity_reason": "recent commit activity",
         "activity_components": {"recent_commits": score * 100},
+        "authority_exception": None,
     }
     value["filter_tags"] = core.project_tags(value)
     return value
@@ -70,6 +83,12 @@ class DualViewTests(unittest.TestCase):
             project("public-zeta", 4),
             project("public-eta", 3),
         ]
+        self.ranked[0]["authority_exception"] = exception(
+            "no_completion_evidence", "Private alpha authority detail.", "a" * 40
+        )
+        self.ranked[5]["authority_exception"] = exception(
+            "ambiguous_project_type", "Public zeta owner-only detail.", "b" * 40
+        )
 
     def test_public_view_contains_full_pool_and_redacts_private_details(self):
         data = dual.build_public_data(copy.deepcopy(self.ranked), [], NOW)
@@ -92,6 +111,11 @@ class DualViewTests(unittest.TestCase):
             "Private beta PR",
             "secret commit",
             "secret description",
+            "authority_exception",
+            "Private alpha authority detail",
+            "Public zeta owner-only detail",
+            "no_completion_evidence",
+            "ambiguous_project_type",
         ]:
             self.assertNotIn(forbidden, outputs)
         self.assertIn("Private project #1", outputs)
@@ -99,7 +123,7 @@ class DualViewTests(unittest.TestCase):
         self.assertIn("Private project #5", outputs)
         self.assertIn("All discovered repositories by recent activity.", outputs)
 
-    def test_private_view_contains_exact_real_top_five(self):
+    def test_private_view_contains_exact_real_top_five_and_full_exception_queue(self):
         data = dual.build_private_data(copy.deepcopy(self.ranked), [], NOW, limit=5)
         self.assertEqual(data["project_count"], 5)
         self.assertEqual([item["full_name"] for item in data["projects"]], [
@@ -109,11 +133,17 @@ class DualViewTests(unittest.TestCase):
             "owner/public-delta",
             "owner/private-epsilon",
         ])
+        self.assertEqual(
+            [item["full_name"] for item in data["authority_exception_queue"]],
+            ["owner/public-zeta", "owner/private-alpha"],
+        )
+        self.assertEqual(data["authority_exception_summary"]["total"], 2)
         private_html = dual.render_private_html(data)
         self.assertIn("owner/private-alpha", private_html)
         self.assertIn("Private alpha next", private_html)
+        self.assertIn("owner/public-zeta", private_html)
+        self.assertIn("Public zeta owner-only detail", private_html)
         self.assertNotIn("Private repository details are redacted", private_html)
-        self.assertNotIn("owner/public-zeta", private_html)
 
     def test_private_do_next_uses_only_top_five_and_can_include_private_projects(self):
         outside = project("outside-top-five", 1, issues=[issue(99, "Outside action", label="blocked")])
