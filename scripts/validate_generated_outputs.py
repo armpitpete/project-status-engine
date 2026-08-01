@@ -115,6 +115,13 @@ def repository_map(internal: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
+def validate_runtime_visibility(runtime_record: dict[str, Any]) -> None:
+    require(
+        isinstance(runtime_record.get("private"), bool),
+        "runtime repository privacy flag is invalid",
+    )
+
+
 def validate_runtime_authority(internal: dict[str, Any]) -> None:
     repositories = repository_map(internal)
     runtime_name = os.environ.get("GITHUB_REPOSITORY", "armpitpete/project-status-engine")
@@ -124,7 +131,7 @@ def validate_runtime_authority(internal: dict[str, Any]) -> None:
     runtime_completion = runtime_record.get("completion") or {}
     local_progress = completion_status.validate_progress(read_json(PROGRESS_PATH))
 
-    require(runtime_record.get("private") is False, "runtime repository unexpectedly private")
+    validate_runtime_visibility(runtime_record)
     require(runtime_completion.get("state") == "valid", "runtime completion is not valid")
     require(runtime_completion.get("authority") == local_progress.get("authority"), "runtime authority differs from local contract")
     require(runtime_completion.get("project_type") == local_progress.get("project_type"), "runtime project type differs from local contract")
