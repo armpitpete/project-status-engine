@@ -97,6 +97,9 @@ class PlanningClient:
     def clear_exception_report(self, full_name):
         self.calls.append(("clear", full_name))
 
+    def close_exception_issue(self, full_name):
+        self.calls.append(("close_exception", full_name))
+
     def repositories(self):
         return [repository()]
 
@@ -129,7 +132,7 @@ class ReadmeMarkerRepairTests(unittest.TestCase):
         self.assertTrue(plan.files[subject.README_PATH].startswith(client.readme))
         self.assertNotIn(subject.PROGRESS_PATH, plan.files)
 
-    def test_valid_marker_interior_update_enters_readme_only_lane(self):
+    def test_valid_marker_interior_is_owned_by_readme_synchroniser(self):
         old = (
             b"# Project\n\n"
             + subject.START_MARKER
@@ -137,11 +140,13 @@ class ReadmeMarkerRepairTests(unittest.TestCase):
             + subject.END_MARKER
             + b"\nTail\n"
         )
-        plan = subject.plan_repository(repository(), PlanningClient(old))
-        self.assertEqual(plan.action, "readme_repair")
-        desired = plan.files[subject.README_PATH]
-        self.assertTrue(desired.startswith(b"# Project\n\n" + subject.START_MARKER))
-        self.assertTrue(desired.endswith(subject.END_MARKER + b"\nTail\n"))
+        client = PlanningClient(old)
+        plan = subject.plan_repository(repository(), client)
+        self.assertEqual(plan.action, "unchanged")
+        self.assertEqual(plan.files, {})
+        result = subject.apply_plan(plan, client, apply=True)
+        self.assertEqual(result.action, "unchanged")
+        self.assertFalse(any(call[0] in {"write", "upsert"} for call in client.calls))
 
     def test_duplicate_or_reversed_markers_remain_primary_exception(self):
         duplicate = (
