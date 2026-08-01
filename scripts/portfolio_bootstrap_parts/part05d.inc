@@ -35,11 +35,23 @@ def plan_repository(repo: dict[str, Any], client: GitHubClient) -> RepositoryPla
     if plan.action != "update" or set(plan.files) != {README_PATH}:
         return plan
 
-    # README-only work is a separate repair lane. The legacy planner has already
-    # validated the contract and built the desired bytes; this additional check
-    # makes the permitted marker structures explicit.
+    # README-only work is a separate repair lane only when the generated marker
+    # pair is absent. Once one valid pair exists, the daily README synchroniser
+    # is the sole writer of its generated interior. This prevents two automation
+    # branches from opening byte-equivalent pull requests for the same README.
     current = client.file(plan.full_name, README_PATH, plan.default_branch)
-    readme_marker_state(current[0] if current is not None else None)
+    marker_state = readme_marker_state(current[0] if current is not None else None)
+    if marker_state == "valid":
+        return RepositoryPlan(
+            plan.full_name,
+            plan.private,
+            plan.default_branch,
+            plan.default_sha,
+            plan.project_type,
+            "unchanged",
+            {},
+            pending_pr_number=plan.pending_pr_number,
+        )
     return RepositoryPlan(
         plan.full_name,
         plan.private,
@@ -73,7 +85,7 @@ def _upsert_readme_repair_pr(
         "- no stage, completed count, total, weight or percentage is changed;\n"
         "- activity, readiness and release state are not inferred.\n\n"
         "## README boundary\n\n"
-        "This pull request changes only `README.md`. It either appends one missing marker pair or replaces only the interior of one correctly ordered marker pair. Human-written bytes outside the generated block are preserved. Duplicate, partial or reversed markers are not repaired automatically."
+        "This pull request changes only `README.md`. It appends one missing marker pair. Once a valid marker pair exists, generated-interior updates belong exclusively to the README synchroniser. Duplicate, partial or reversed markers are not repaired automatically."
     )
     if existing and isinstance(existing.get("number"), int):
         self.request(
