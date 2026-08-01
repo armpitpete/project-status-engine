@@ -1,0 +1,75 @@
+name: Portfolio forensic audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/portfolio-forensic-audit.yml"
+      - "scripts/portfolio_forensic_audit.py"
+      - "tests/test_portfolio_forensic_audit.py"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: portfolio-forensic-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Check out audit implementation
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Run deterministic forensic-audit tests
+        run: python -m unittest discover -s tests -p "test_portfolio_forensic_audit.py" -v
+
+      - name: Confirm private portfolio token exists
+        env:
+          FORENSIC_AUDIT_TOKEN: ${{ secrets.PROJECT_STATUS_TOKEN }}
+        run: test -n "$FORENSIC_AUDIT_TOKEN"
+
+      - name: Scan Git history, Actions, artifacts and Releases
+        env:
+          FORENSIC_AUDIT_TOKEN: ${{ secrets.PROJECT_STATUS_TOKEN }}
+        run: >-
+          python scripts/portfolio_forensic_audit.py
+          --owner armpitpete
+          --max-repositories 100
+          --output private-build/portfolio-forensic-audit.json
+
+      - name: Prove report contains fingerprints rather than values
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("private-build/portfolio-forensic-audit.json")
+          report = json.loads(path.read_text(encoding="utf-8"))
+          assert report["security_boundary"]["secret_values_in_report"] is False
+          assert report["security_boundary"]["finding_values_replaced_by_sha256_fingerprint"] is True
+          assert report["coverage"]["repositories"] > 0
+          print(json.dumps({
+              "status": report["status"],
+              "repositories": report["coverage"]["repositories"],
+              "findings": report["finding_count"],
+          }, sort_keys=True))
+          PY
+
+      - name: Upload private forensic report
+        uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-forensic-audit
+          path: private-build/portfolio-forensic-audit.json
+          if-no-files-found: error
+          retention-days: 30
