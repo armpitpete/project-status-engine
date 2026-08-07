@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Validate and render explicit repository completion authority.
+"""Validate and render explicit repository progress-count authority.
 
-Completion is read only from ``.project/progress.json``. Repository activity,
+Progress is read only from ``.project/progress.json``. Repository activity,
 commit counts, issues, pull requests, and filenames are never used to infer a
-percentage.
+percentage. Counted progress is not lifecycle completion: a stage whose count
+reaches its total is labelled ``count_complete`` rather than ``complete``.
 """
 from __future__ import annotations
 
@@ -19,7 +20,14 @@ SCHEMA_VERSION = 1
 PROGRESS_PATH = os.getenv("STATUS_PROGRESS_PATH", ".project/progress.json")
 STAGE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
-TOP_LEVEL_FIELDS = {"schema_version", "authority", "project_type", "note", "stages", "overall"}
+TOP_LEVEL_FIELDS = {
+    "schema_version",
+    "authority",
+    "project_type",
+    "note",
+    "stages",
+    "overall",
+}
 STAGE_FIELDS = {"id", "label", "completed", "total", "weight", "evidence"}
 OVERALL_FIELDS = {"enabled"}
 
@@ -31,7 +39,9 @@ class ProgressValidationError(ValueError):
 def _reject_unknown(mapping: dict[str, Any], allowed: set[str], field: str) -> None:
     unknown = sorted(set(mapping) - allowed)
     if unknown:
-        raise ProgressValidationError(f"{field} contains unknown fields: {', '.join(unknown)}")
+        raise ProgressValidationError(
+            f"{field} contains unknown fields: {', '.join(unknown)}"
+        )
 
 
 def _required_text(value: Any, field: str) -> str:
@@ -60,7 +70,7 @@ def _optional_number(value: Any, field: str) -> float | None:
 
 
 def validate_progress(document: Any) -> dict[str, Any]:
-    """Validate a v1 document and return deterministic calculated values."""
+    """Validate a v1 progress-count document and calculate deterministic values."""
     if not isinstance(document, dict):
         raise ProgressValidationError("document must be a JSON object")
     _reject_unknown(document, TOP_LEVEL_FIELDS, "document")
@@ -103,7 +113,7 @@ def validate_progress(document: Any) -> dict[str, Any]:
         weight = _optional_number(raw.get("weight"), f"{prefix}.weight")
         percentage = round(completed / total * 100, 1)
         state = (
-            "complete"
+            "count_complete"
             if completed == total
             else "not_started"
             if completed == 0
@@ -119,7 +129,9 @@ def validate_progress(document: Any) -> dict[str, Any]:
             "weight": weight,
         }
         if "evidence" in raw:
-            stage["evidence"] = _required_text(raw["evidence"], f"{prefix}.evidence")
+            stage["evidence"] = _required_text(
+                raw["evidence"], f"{prefix}.evidence"
+            )
         stages.append(stage)
 
     if "overall" in document:
@@ -139,7 +151,8 @@ def validate_progress(document: Any) -> dict[str, Any]:
         missing = [stage["id"] for stage in stages if stage["weight"] is None]
         if missing:
             raise ProgressValidationError(
-                "overall is enabled but stages are missing weights: " + ", ".join(missing)
+                "overall is enabled but stages are missing weights: "
+                + ", ".join(missing)
             )
         weight_total = sum(float(stage["weight"]) for stage in stages)
         if abs(weight_total - 100.0) > 0.001:
@@ -162,17 +175,23 @@ def validate_progress(document: Any) -> dict[str, Any]:
         "authority": authority,
         "overall_enabled": enabled,
         "overall_percentage": overall_percentage,
+        "progress_only": True,
+        "completion_claim": "not_declared",
         "stages": stages,
     }
     if "project_type" in document:
-        result["project_type"] = _required_text(document["project_type"], "project_type")
+        result["project_type"] = _required_text(
+            document["project_type"], "project_type"
+        )
     if "note" in document:
         result["note"] = _required_text(document["note"], "note")
     return result
 
 
 def _reject_json_constant(value: str) -> None:
-    raise ProgressValidationError(f"progress file contains non-standard JSON constant: {value}")
+    raise ProgressValidationError(
+        f"progress file contains non-standard JSON constant: {value}"
+    )
 
 
 def _object_without_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -188,7 +207,9 @@ def decode_contents_payload(payload: Any) -> Any:
     """Decode a GitHub Contents API file response as strict JSON."""
     if not isinstance(payload, dict) or payload.get("type") != "file":
         raise ProgressValidationError("progress path is not a file")
-    if payload.get("encoding") != "base64" or not isinstance(payload.get("content"), str):
+    if payload.get("encoding") != "base64" or not isinstance(
+        payload.get("content"), str
+    ):
         raise ProgressValidationError("progress file must be returned as base64 content")
     try:
         raw = base64.b64decode(
@@ -217,6 +238,8 @@ def not_configured() -> dict[str, Any]:
         "source_path": PROGRESS_PATH,
         "overall_enabled": False,
         "overall_percentage": None,
+        "progress_only": True,
+        "completion_claim": "not_declared",
         "stages": [],
     }
 
@@ -228,6 +251,8 @@ def invalid(message: str) -> dict[str, Any]:
         "source_path": PROGRESS_PATH,
         "overall_enabled": False,
         "overall_percentage": None,
+        "progress_only": True,
+        "completion_claim": "not_declared",
         "stages": [],
         "error": message,
     }
@@ -237,7 +262,7 @@ def fetch_repository_progress(
     repo_full_name: str,
     getter: Callable[[str, dict[str, str | int] | None], Any],
 ) -> tuple[dict[str, Any], str | None]:
-    """Fetch one repository's explicit progress authority."""
+    """Fetch one repository's explicit progress-count authority."""
     path = f"/repos/{repo_full_name}/contents/{PROGRESS_PATH}"
     try:
         payload = getter(path, None)
@@ -278,10 +303,7 @@ def summary_for(
         if state not in {"valid", "invalid", "not_configured"}:
             state = "invalid"
         summary[state] += 1
-        if (
-            state == "valid"
-            and project_completion.get("overall_percentage") is not None
-        ):
+        if state == "valid" and project_completion.get("overall_percentage") is not None:
             summary["overall_available"] += 1
     return summary
 
@@ -290,7 +312,7 @@ def _project_completion(
     project: dict[str, Any], *, include_private: bool
 ) -> tuple[str, str, str]:
     if project.get("private") and not include_private:
-        return "Redacted", "—", "Private repository completion is not published."
+        return "Redacted", "—", "Private repository progress is not published."
     project_completion = project.get("completion") or not_configured()
     state = project_completion.get("state")
     if state == "not_configured":
@@ -299,17 +321,17 @@ def _project_completion(
         return (
             "Invalid",
             "—",
-            str(project_completion.get("error") or "Invalid completion authority."),
+            str(project_completion.get("error") or "Invalid progress authority."),
         )
     overall = project_completion.get("overall_percentage")
     overall_text = "—" if overall is None else f"{overall:.1f}%"
     stages = project_completion.get("stages") or []
     stage_text = "; ".join(
         f"{stage['label']} {stage['completed']}/{stage['total']} "
-        f"({stage['percentage']:.1f}%)"
+        f"({stage['percentage']:.1f}%, {stage['state']})"
         for stage in stages
     )
-    return "Valid", overall_text, stage_text or "No stages."
+    return "Valid progress", overall_text, stage_text or "No stages."
 
 
 def render_html(data: dict[str, Any]) -> str:
@@ -329,11 +351,12 @@ def render_html(data: dict[str, Any]) -> str:
         )
     body = "".join(rows) or "<tr><td colspan='4'>No repositories found.</td></tr>"
     return (
-        "<section class='panel'><h2>Completion authority</h2>"
+        "<section class='panel'><h2>Progress-count authority</h2>"
         "<p class='muted'>Percentages come only from validated "
-        ".project/progress.json files; activity is never treated as completion.</p>"
+        ".project/progress.json files. They do not prove implementation, "
+        "deployment, live behaviour, human acceptance, or completion.</p>"
         "<div style='overflow-x:auto'><table class='heat'><thead><tr>"
-        "<th>Project</th><th>Authority</th><th>Overall</th><th>Stages</th>"
+        "<th>Project</th><th>Progress authority</th><th>Overall</th><th>Stages</th>"
         f"</tr></thead><tbody>{body}</tbody></table></div></section>"
     )
 
@@ -341,13 +364,14 @@ def render_html(data: dict[str, Any]) -> str:
 def render_markdown(data: dict[str, Any]) -> str:
     include_private = data.get("view") == "private"
     lines = [
-        "# Completion Status",
+        "# Progress Status",
         "",
         "Percentages are calculated only from validated "
         "`.project/progress.json` authority files.",
-        "Repository activity is not completion.",
+        "Repository activity is not progress, and progress is not lifecycle completion.",
+        "A count-complete stage does not prove implementation, deployment, live behaviour, or human acceptance.",
         "",
-        "| Repository | Authority | Overall | Stage detail |",
+        "| Repository | Progress authority | Overall | Stage detail |",
         "|---|---|---:|---|",
     ]
     for project in data.get("projects", []):
