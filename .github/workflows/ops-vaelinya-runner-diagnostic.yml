@@ -8,7 +8,7 @@ on:
       - .github/workflows/ops-vaelinya-runner-diagnostic.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   diagnose:
@@ -30,11 +30,49 @@ jobs:
 
       - name: Read-only runner diagnostic
         run: |
-          set -euo pipefail
+          set +e
           ssh \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
             -i "$RUNNER_TEMP/ssh/id_ed25519" \
             vaelinya@server.vaelinya.uk \
-            'set -eu; echo "HOST=$(hostname)"; echo "USER=$(id -un)"; echo "--- runner units ---"; systemctl list-units --all --type=service --no-pager | grep "actions.runner" || true; echo "--- runner unit files ---"; systemctl list-unit-files --type=service --no-pager | grep "actions.runner" || true; echo "--- runner processes ---"; ps -eo user,pid,comm,args | grep -E "Runner.Listener|runsvc.sh" | grep -v grep || true; echo "--- sudo noninteractive ---"; sudo -n -l 2>&1 || true'
+            'set -u; echo "HOST=$(hostname)"; echo "USER=$(id -un)"; echo "--- runner units ---"; systemctl list-units --all --type=service --no-pager | grep "actions.runner" || true; echo "--- runner unit files ---"; systemctl list-unit-files --type=service --no-pager | grep "actions.runner" || true; echo "--- runner processes ---"; ps -eo user,pid,comm,args | grep -E "Runner.Listener|runsvc.sh" | grep -v grep || true; echo "--- sudo noninteractive ---"; sudo -n -l 2>&1 || true' \
+            > "$RUNNER_TEMP/diag.txt" 2>&1
+          rc=$?
+          set -e
+          printf '\nSSH_EXIT=%s\n' "$rc" >> "$RUNNER_TEMP/diag.txt"
+          cat "$RUNNER_TEMP/diag.txt"
+
+      - name: Publish diagnostic report to ops branch
+        uses: actions/github-script@v7
+        env:
+          DIAG_PATH: ${{ runner.temp }}/diag.txt
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const fs = require('fs');
+            const path = '.ops/vaelinya-runner-diagnostic.txt';
+            const branch = context.ref.replace('refs/heads/', '');
+            const content = fs.readFileSync(process.env.DIAG_PATH, 'utf8');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path,
+                ref: branch,
+              });
+              sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              message: 'Record Vaelinya runner diagnostic',
+              content: Buffer.from(content).toString('base64'),
+              branch,
+              ...(sha ? {sha} : {}),
+            });
