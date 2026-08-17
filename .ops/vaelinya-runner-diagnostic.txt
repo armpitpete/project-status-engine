@@ -1,50 +1,21 @@
 HOST=server.vaelinya.uk
-USER=vaelinya
---- service state ---
-active
-● actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service - GitHub Actions Runner (armpitpete-vaelinya-canon.oracle-vaelinya-01)
-     Loaded: loaded (/etc/systemd/system/actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service; enabled; preset: enabled)
-    Drop-In: /etc/systemd/system/actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service.d
-             └─10-hardening.conf, 20-resource-network.conf, 30-hidden-country-isolation.conf
-     Active: active (running) since Fri 2026-08-14 10:15:13 BST; 3 days ago
-   Main PID: 2487259 (runsvc.sh)
-      Tasks: 40 (limit: 512)
-     Memory: 1.1G (high: 3.0G max: 4.0G swap max: 0B available: 1.8G peak: 1.2G)
-        CPU: 5h 55min 56.626s
-     CGroup: /system.slice/actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service
-             ├─1239674 /var/lib/gha-vaelinya/actions-runner/bin/Runner.Worker spawnclient 157 160
-             ├─2487259 /bin/bash /var/lib/gha-vaelinya/actions-runner/runsvc.sh
-             ├─2487261 ./externals/node20/bin/node ./bin/RunnerService.js
-             └─2487268 /var/lib/gha-vaelinya/actions-runner/bin/Runner.Listener run --startuptype service
---- service cgroup ---
-CGroup /system.slice/actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service:
-├─1239674 /var/lib/gha-vaelinya/actions-runner/bin/Runner.Worker spawnclient 15…
-├─2487259 /bin/bash /var/lib/gha-vaelinya/actions-runner/runsvc.sh
-├─2487261 ./externals/node20/bin/node ./bin/RunnerService.js
-└─2487268 /var/lib/gha-vaelinya/actions-runner/bin/Runner.Listener run --startu…
---- full gha-vaelinya process view ---
-gha-hidden-country   1558397       1 Wed Aug 12 18:07:44 2026  4-21:07:22 Ss   runsvc.sh       /bin/bash /var/lib/gha-hidden-country/actions-runner/runsvc.sh
-gha-hidden-country   1558407 1558400 Wed Aug 12 18:07:45 2026  4-21:07:21 Sl        \_ Runner.      \_ /var/lib/gha-hidden-country/actions-runner/bin/Runner.Listener run --startuptype service
-gha-threadkeeper     1577815       1 Wed Aug 12 18:48:49 2026  4-20:26:17 Ss   runsvc.sh       /bin/bash /var/lib/gha-threadkeeper/actions-runner/runsvc.sh
-gha-threadkeeper     1577825 1577818 Wed Aug 12 18:48:49 2026  4-20:26:17 Sl        \_ Runner.      \_ /var/lib/gha-threadkeeper/actions-runner/bin/Runner.Listener run --startuptype service
-gha-twis             1577866       1 Wed Aug 12 18:48:54 2026  4-20:26:12 Ss   runsvc.sh       /bin/bash /var/lib/gha-twis/actions-runner/runsvc.sh
-gha-twis             1577876 1577869 Wed Aug 12 18:48:54 2026  4-20:26:12 Sl        \_ Runner.      \_ /var/lib/gha-twis/actions-runner/bin/Runner.Listener run --startuptype service
-gha-canon-garden     1594021       1 Wed Aug 12 19:29:14 2026  4-19:45:52 Ss   runsvc.sh       /bin/bash /var/lib/gha-canon-garden/actions-runner/runsvc.sh
-gha-canon-garden     1594035 1594026 Wed Aug 12 19:29:14 2026  4-19:45:52 Sl        \_ Runner.      \_ /var/lib/gha-canon-garden/actions-runner/bin/Runner.Listener run --startuptype service
-gha-vaelinya         2487259       1 Fri Aug 14 10:15:12 2026  3-04:59:54 Ss   runsvc.sh       /bin/bash /var/lib/gha-vaelinya/actions-runner/runsvc.sh
-gha-vaelinya         2487261 2487259 Fri Aug 14 10:15:12 2026  3-04:59:54 Sl    \_ node         \_ ./externals/node20/bin/node ./bin/RunnerService.js
-gha-vaelinya         2487268 2487261 Fri Aug 14 10:15:12 2026  3-04:59:54 Sl        \_ Runner.      \_ /var/lib/gha-vaelinya/actions-runner/bin/Runner.Listener run --startuptype service
-gha-vaelinya         1239674 2487268 Mon Aug 17 15:14:52 2026       00:14 Sl            \_ Run          \_ /var/lib/gha-vaelinya/actions-runner/bin/Runner.Worker spawnclient 157 160
---- github connectivity ---
-HTTP/2 200 
-date: Mon, 17 Aug 2026 14:14:59 GMT
-cache-control: public, max-age=60, s-maxage=60
-vary: Accept,Accept-Encoding, Accept, X-Requested-With
-x-github-api-version-selected: 2022-11-28
-access-control-expose-headers: ETag, Link, Location, Retry-After, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Resource, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval, X-GitHub-Media-Type, X-GitHub-SSO, X-GitHub-Request-Id, Deprecation, Sunset, Warning
-access-control-allow-origin: *
-strict-transport-security: max-age=31536000; includeSubdomains; preload
---- sudo noninteractive ---
-sudo: a password is required
+UTC=2026-08-17T14:24:05Z
+--- exact codeload probe ---
+HTTP/2 429 
+access-control-allow-origin: https://render.githubusercontent.com
+content-security-policy: default-src 'none'; style-src 'unsafe-inline'; sandbox
+cross-origin-resource-policy: cross-origin
+strict-transport-security: max-age=31536000
+vary: Authorization,Accept-Encoding
+x-content-type-options: nosniff
+x-frame-options: deny
+x-xss-protection: 1; mode=block
+date: Mon, 17 Aug 2026 14:24:08 GMT
+content-length: 199
+content-type: text/plain; charset=utf-8
+x-github-request-id: BE9A:34EF82:D8D2:2EF6E:6A831985
+x-github-edge-region: uksouth
+
+CURL_EXIT=0
 
 SSH_EXIT=0
