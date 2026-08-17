@@ -1,0 +1,40 @@
+name: Diagnose Vaelinya Oracle runner
+
+on:
+  push:
+    branches:
+      - ops/bootstrap-convergence-proof
+    paths:
+      - .github/workflows/ops-vaelinya-runner-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prepare pinned SSH credential
+        env:
+          DEPLOY_KEY: ${{ secrets.PRIVATE_STATUS_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PRIVATE_STATUS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY"
+          test -n "$KNOWN_HOSTS"
+          install -d -m 700 "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/ssh/id_ed25519"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/ssh/id_ed25519" "$RUNNER_TEMP/ssh/known_hosts"
+
+      - name: Read-only runner diagnostic
+        run: |
+          set -euo pipefail
+          ssh \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
+            -i "$RUNNER_TEMP/ssh/id_ed25519" \
+            vaelinya@server.vaelinya.uk \
+            'set -eu; echo "HOST=$(hostname)"; echo "USER=$(id -un)"; echo "--- runner units ---"; systemctl list-units --all --type=service --no-pager | grep "actions.runner" || true; echo "--- runner unit files ---"; systemctl list-unit-files --type=service --no-pager | grep "actions.runner" || true; echo "--- runner processes ---"; ps -eo user,pid,comm,args | grep -E "Runner.Listener|runsvc.sh" | grep -v grep || true; echo "--- sudo noninteractive ---"; sudo -n -l 2>&1 || true'
