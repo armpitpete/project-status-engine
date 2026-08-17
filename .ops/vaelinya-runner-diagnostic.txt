@@ -1,0 +1,29 @@
+HOST=server.vaelinya.uk
+USER=vaelinya
+--- runner units ---
+  actions.runner.armpitpete-canon-garden.oracle-canon-garden-01.service         loaded    active     running       GitHub Actions Runner (armpitpete-canon-garden.oracle-canon-garden-01)
+  actions.runner.armpitpete-the-hidden-country.oracle-hidden-country-01.service loaded    active     running       GitHub Actions Runner (armpitpete-the-hidden-country.oracle-hidden-country-01)
+  actions.runner.armpitpete-thisweekinsmoke.oracle-twis-01.service              loaded    active     running       GitHub Actions Runner (armpitpete-thisweekinsmoke.oracle-twis-01)
+  actions.runner.armpitpete-threadkeeper.oracle-threadkeeper-01.service         loaded    active     running       GitHub Actions Runner (armpitpete-threadkeeper.oracle-threadkeeper-01)
+  actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service           loaded    active     running       GitHub Actions Runner (armpitpete-vaelinya-canon.oracle-vaelinya-01)
+--- runner unit files ---
+actions.runner.armpitpete-canon-garden.oracle-canon-garden-01.service         enabled         enabled
+actions.runner.armpitpete-the-hidden-country.oracle-hidden-country-01.service enabled         enabled
+actions.runner.armpitpete-thisweekinsmoke.oracle-twis-01.service              enabled         enabled
+actions.runner.armpitpete-threadkeeper.oracle-threadkeeper-01.service         enabled         enabled
+actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service           enabled         enabled
+--- runner processes ---
+gha-hid+ 1558397 runsvc.sh       /bin/bash /var/lib/gha-hidden-country/actions-runner/runsvc.sh
+gha-hid+ 1558407 Runner.Listener /var/lib/gha-hidden-country/actions-runner/bin/Runner.Listener run --startuptype service
+gha-thr+ 1577815 runsvc.sh       /bin/bash /var/lib/gha-threadkeeper/actions-runner/runsvc.sh
+gha-thr+ 1577825 Runner.Listener /var/lib/gha-threadkeeper/actions-runner/bin/Runner.Listener run --startuptype service
+gha-twis 1577866 runsvc.sh       /bin/bash /var/lib/gha-twis/actions-runner/runsvc.sh
+gha-twis 1577876 Runner.Listener /var/lib/gha-twis/actions-runner/bin/Runner.Listener run --startuptype service
+gha-can+ 1594021 runsvc.sh       /bin/bash /var/lib/gha-canon-garden/actions-runner/runsvc.sh
+gha-can+ 1594035 Runner.Listener /var/lib/gha-canon-garden/actions-runner/bin/Runner.Listener run --startuptype service
+gha-vae+ 2487259 runsvc.sh       /bin/bash /var/lib/gha-vaelinya/actions-runner/runsvc.sh
+gha-vae+ 2487268 Runner.Listener /var/lib/gha-vaelinya/actions-runner/bin/Runner.Listener run --startuptype service
+--- sudo noninteractive ---
+sudo: a password is required
+
+SSH_EXIT=0
