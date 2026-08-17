@@ -1,4 +1,4 @@
-name: Diagnose Vaelinya Oracle runner
+name: Probe Vaelinya runner codeload
 
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
           chmod 600 "$RUNNER_TEMP/ssh/id_ed25519" "$RUNNER_TEMP/ssh/known_hosts"
 
-      - name: Read-only runner diagnostic
+      - name: Probe exact codeload action archive from Oracle host
         run: |
           set +e
           ssh \
@@ -37,7 +37,7 @@ jobs:
             -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
             -i "$RUNNER_TEMP/ssh/id_ed25519" \
             vaelinya@server.vaelinya.uk \
-            'set -u; svc="actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service"; echo "HOST=$(hostname)"; echo "USER=$(id -un)"; echo "--- service state ---"; systemctl is-active "$svc" || true; systemctl --no-pager --full status "$svc" 2>&1 | tail -n 35 || true; echo "--- service cgroup ---"; systemd-cgls --no-pager "/system.slice/$svc" 2>&1 || true; echo "--- full gha-vaelinya process view ---"; ps -eo user:20,pid,ppid,lstart,etime,stat,comm,args --forest | grep -E "gha-vaelinya|Runner.Worker|Runner.Listener|runsvc.sh|/var/lib/gha-vaelinya" | grep -v grep || true; echo "--- github connectivity ---"; curl -fsSI --max-time 15 https://api.github.com/ 2>&1 | head -n 8 || true; echo "--- sudo noninteractive ---"; sudo -n -l 2>&1 || true' \
+            'set -u; url="https://codeload.github.com/actions/github-script/tar.gz/f28e40c7f34bde8b3046d885e986cb6290c5673b"; echo "HOST=$(hostname)"; echo "UTC=$(date -u +%FT%TZ)"; echo "--- exact codeload probe ---"; curl -sS -D - -o /dev/null --max-time 30 "$url" | sed -n "1,20p"; echo "CURL_EXIT=${PIPESTATUS:-unknown}"' \
             > "$RUNNER_TEMP/diag.txt" 2>&1
           rc=$?
           set -e
@@ -62,12 +62,4 @@ jobs:
             } catch (error) {
               if (error.status !== 404) throw error;
             }
-            await github.rest.repos.createOrUpdateFileContents({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path,
-              message: 'Record Vaelinya runner diagnostic',
-              content: Buffer.from(content).toString('base64'),
-              branch,
-              ...(sha ? {sha} : {}),
-            });
+            await github.rest.repos.createOrUpdateFileContents({owner: context.repo.owner, repo: context.repo.repo, path, message: 'Record Vaelinya codeload probe', content: Buffer.from(content).toString('base64'), branch, ...(sha ? {sha} : {})});
