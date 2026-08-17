@@ -37,7 +37,7 @@ jobs:
             -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
             -i "$RUNNER_TEMP/ssh/id_ed25519" \
             vaelinya@server.vaelinya.uk \
-            'set -u; echo "HOST=$(hostname)"; echo "USER=$(id -un)"; echo "--- runner units ---"; systemctl list-units --all --type=service --no-pager | grep "actions.runner" || true; echo "--- runner unit files ---"; systemctl list-unit-files --type=service --no-pager | grep "actions.runner" || true; echo "--- runner processes ---"; ps -eo user,pid,comm,args | grep -E "Runner.Listener|runsvc.sh" | grep -v grep || true; echo "--- sudo noninteractive ---"; sudo -n -l 2>&1 || true' \
+            'set -u; svc="actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service"; echo "HOST=$(hostname)"; echo "USER=$(id -un)"; echo "--- service state ---"; systemctl is-active "$svc" || true; systemctl is-enabled "$svc" || true; systemctl --no-pager --full status "$svc" 2>&1 | tail -n 40 || true; echo "--- recent journal ---"; journalctl --no-pager -u "$svc" -n 80 2>&1 || true; echo "--- runner processes ---"; ps -eo user,pid,lstart,etime,stat,comm,args | grep -E "gha-vae|Runner.Listener|runsvc.sh" | grep -v grep || true; echo "--- runner storage visibility ---"; ls -ld /var/lib/gha-vaelinya /var/lib/gha-vaelinya/actions-runner /var/lib/gha-vaelinya/actions-runner/_diag 2>&1 || true; echo "--- github connectivity ---"; curl -fsSI --max-time 15 https://github.com/ 2>&1 | head -n 8 || true; curl -fsSI --max-time 15 https://api.github.com/ 2>&1 | head -n 8 || true; echo "--- network sockets ---"; ss -tn 2>&1 | grep -E ":443|ESTAB" | head -n 40 || true; echo "--- sudo noninteractive ---"; sudo -n -l 2>&1 || true' \
             > "$RUNNER_TEMP/diag.txt" 2>&1
           rc=$?
           set -e
@@ -57,12 +57,7 @@ jobs:
             const content = fs.readFileSync(process.env.DIAG_PATH, 'utf8');
             let sha;
             try {
-              const current = await github.rest.repos.getContent({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                path,
-                ref: branch,
-              });
+              const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: branch });
               sha = current.data.sha;
             } catch (error) {
               if (error.status !== 404) throw error;
