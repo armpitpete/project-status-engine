@@ -1,0 +1,37 @@
+name: One-shot Vaelinya codeload probe 7
+
+on:
+  push:
+    branches:
+      - ops/bootstrap-convergence-proof
+    paths:
+      - .github/workflows/ops-vaelinya-codeload-probe-7.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prepare pinned SSH credential
+        env:
+          DEPLOY_KEY: ${{ secrets.PRIVATE_STATUS_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PRIVATE_STATUS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY"
+          test -n "$KNOWN_HOSTS"
+          install -d -m 700 "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/ssh/id_ed25519"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/ssh/id_ed25519" "$RUNNER_TEMP/ssh/known_hosts"
+
+      - name: Require codeload HTTP 200 from Oracle origin
+        run: |
+          set -euo pipefail
+          code=$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -i "$RUNNER_TEMP/ssh/id_ed25519" vaelinya@server.vaelinya.uk \
+            'curl -sS -o /dev/null -w "%{http_code}" --max-time 30 "https://codeload.github.com/actions/github-script/tar.gz/f28e40c7f34bde8b3046d885e986cb6290c5673b"')
+          echo "Oracle codeload HTTP $code"
+          test "$code" = "200"
