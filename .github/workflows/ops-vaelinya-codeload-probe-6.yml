@@ -1,0 +1,55 @@
+name: One-shot Vaelinya codeload probe 6
+
+on:
+  push:
+    branches:
+      - ops/bootstrap-convergence-proof
+    paths:
+      - .github/workflows/ops-vaelinya-codeload-probe-6.yml
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prepare pinned SSH credential
+        env:
+          DEPLOY_KEY: ${{ secrets.PRIVATE_STATUS_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PRIVATE_STATUS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KEY"
+          test -n "$KNOWN_HOSTS"
+          install -d -m 700 "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/ssh/id_ed25519"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/ssh/id_ed25519" "$RUNNER_TEMP/ssh/known_hosts"
+
+      - name: Probe exact archive from Oracle origin
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -i "$RUNNER_TEMP/ssh/id_ed25519" vaelinya@server.vaelinya.uk \
+            'echo "UTC=$(date -u +%FT%TZ)"; printf "codeload="; curl -sS -o /dev/null -w "%{http_code}\n" --max-time 30 "https://codeload.github.com/actions/github-script/tar.gz/f28e40c7f34bde8b3046d885e986cb6290c5673b"' \
+            > "$RUNNER_TEMP/probe.txt"
+          cat "$RUNNER_TEMP/probe.txt"
+
+      - name: Publish report
+        uses: actions/github-script@v7
+        env:
+          REPORT: ${{ runner.temp }}/probe.txt
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const fs = require('fs');
+            const path = '.ops/vaelinya-codeload-probe-6.txt';
+            const branch = context.ref.replace('refs/heads/', '');
+            const content = fs.readFileSync(process.env.REPORT, 'utf8');
+            let sha;
+            try {
+              const cur = await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:branch});
+              sha = cur.data.sha;
+            } catch (e) { if (e.status !== 404) throw e; }
+            await github.rest.repos.createOrUpdateFileContents({owner:context.repo.owner,repo:context.repo.repo,path,message:'Record one-shot Vaelinya codeload probe 6',content:Buffer.from(content).toString('base64'),branch,...(sha?{sha}:{})});
