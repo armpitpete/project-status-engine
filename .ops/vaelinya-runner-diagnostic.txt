@@ -1,21 +1,13 @@
-HOST=server.vaelinya.uk
-UTC=2026-08-17T14:28:02Z
---- exact codeload probe ---
-HTTP/2 429 
-access-control-allow-origin: https://render.githubusercontent.com
-content-security-policy: default-src 'none'; style-src 'unsafe-inline'; sandbox
-cross-origin-resource-policy: cross-origin
-strict-transport-security: max-age=31536000
-vary: Authorization,Accept-Encoding
-x-content-type-options: nosniff
-x-frame-options: deny
-x-xss-protection: 1; mode=block
-date: Mon, 17 Aug 2026 14:28:06 GMT
-content-length: 199
-content-type: text/plain; charset=utf-8
-x-github-request-id: B9B6:199695:CAC9:2F46C:6A831A72
-x-github-edge-region: uksouth
-
-CURL_EXIT=0
-
-SSH_EXIT=0
+--- vaelinya account ---
+id=uid=1002(vaelinya) gid=1002(vaelinya) groups=1002(vaelinya)
+f: /var/lib/gha-vaelinya/actions-runner
+drwxr-xr-x root         root         /
+drwxr-xr-x root         root         var
+drwxr-xr-x root         root         lib
+drwxr-x--- gha-vaelinya gha-vaelinya gha-vaelinya
+                                      actions-runner - Permission denied
+codeload=429
+VAELINYA_SSH_EXIT=0
+--- root auth-only probe ---
+root@server.vaelinya.uk: Permission denied (publickey).
+ROOT_SSH_EXIT=255
