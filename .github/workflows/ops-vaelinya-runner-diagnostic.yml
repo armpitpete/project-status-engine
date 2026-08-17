@@ -1,5 +1,5 @@
-# recovery probe 2
-name: Probe Vaelinya runner codeload
+# recovery probe 3
+name: Probe Vaelinya runner maintenance access
 
 on:
   push:
@@ -29,14 +29,19 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
           chmod 600 "$RUNNER_TEMP/ssh/id_ed25519" "$RUNNER_TEMP/ssh/known_hosts"
 
-      - name: Probe exact codeload action archive from Oracle host
+      - name: Probe maintenance access and codeload
         run: |
           set +e
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -i "$RUNNER_TEMP/ssh/id_ed25519" vaelinya@server.vaelinya.uk \
-            'set -u; url="https://codeload.github.com/actions/github-script/tar.gz/f28e40c7f34bde8b3046d885e986cb6290c5673b"; echo "HOST=$(hostname)"; echo "UTC=$(date -u +%FT%TZ)"; echo "--- exact codeload probe ---"; curl -sS -D - -o /dev/null --max-time 30 "$url" | sed -n "1,20p"; echo "CURL_EXIT=${PIPESTATUS:-unknown}"' > "$RUNNER_TEMP/diag.txt" 2>&1
-          rc=$?
+          {
+            echo '--- vaelinya account ---'
+            ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -i "$RUNNER_TEMP/ssh/id_ed25519" vaelinya@server.vaelinya.uk \
+              'echo "id=$(id)"; namei -l /var/lib/gha-vaelinya/actions-runner 2>&1 || true; url="https://codeload.github.com/actions/github-script/tar.gz/f28e40c7f34bde8b3046d885e986cb6290c5673b"; printf "codeload="; curl -sS -o /dev/null -w "%{http_code}\n" --max-time 30 "$url"'
+            echo "VAELINYA_SSH_EXIT=$?"
+            echo '--- root auth-only probe ---'
+            ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" -i "$RUNNER_TEMP/ssh/id_ed25519" root@server.vaelinya.uk 'echo ROOT_AUTH_OK; id' 2>&1
+            echo "ROOT_SSH_EXIT=$?"
+          } > "$RUNNER_TEMP/diag.txt" 2>&1
           set -e
-          printf '\nSSH_EXIT=%s\n' "$rc" >> "$RUNNER_TEMP/diag.txt"
           cat "$RUNNER_TEMP/diag.txt"
 
       - name: Publish diagnostic report to ops branch
@@ -52,4 +57,4 @@ jobs:
             const content = fs.readFileSync(process.env.DIAG_PATH, 'utf8');
             let sha;
             try { const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: branch }); sha = current.data.sha; } catch (error) { if (error.status !== 404) throw error; }
-            await github.rest.repos.createOrUpdateFileContents({owner: context.repo.owner, repo: context.repo.repo, path, message: 'Record Vaelinya codeload probe', content: Buffer.from(content).toString('base64'), branch, ...(sha ? {sha} : {})});
+            await github.rest.repos.createOrUpdateFileContents({owner: context.repo.owner, repo: context.repo.repo, path, message: 'Record Vaelinya maintenance-access probe', content: Buffer.from(content).toString('base64'), branch, ...(sha ? {sha} : {})});
