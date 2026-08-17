@@ -2,73 +2,48 @@ HOST=server.vaelinya.uk
 USER=vaelinya
 --- service state ---
 active
-enabled
 ● actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service - GitHub Actions Runner (armpitpete-vaelinya-canon.oracle-vaelinya-01)
      Loaded: loaded (/etc/systemd/system/actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service; enabled; preset: enabled)
     Drop-In: /etc/systemd/system/actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service.d
              └─10-hardening.conf, 20-resource-network.conf, 30-hidden-country-isolation.conf
      Active: active (running) since Fri 2026-08-14 10:15:13 BST; 3 days ago
    Main PID: 2487259 (runsvc.sh)
-      Tasks: 39 (limit: 512)
+      Tasks: 40 (limit: 512)
      Memory: 1.1G (high: 3.0G max: 4.0G swap max: 0B available: 1.8G peak: 1.2G)
-        CPU: 5h 55min 43.829s
+        CPU: 5h 55min 56.626s
      CGroup: /system.slice/actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service
-             ├─1238937 /var/lib/gha-vaelinya/actions-runner/bin/Runner.Worker spawnclient 152 158
+             ├─1239674 /var/lib/gha-vaelinya/actions-runner/bin/Runner.Worker spawnclient 157 160
              ├─2487259 /bin/bash /var/lib/gha-vaelinya/actions-runner/runsvc.sh
              ├─2487261 ./externals/node20/bin/node ./bin/RunnerService.js
              └─2487268 /var/lib/gha-vaelinya/actions-runner/bin/Runner.Listener run --startuptype service
---- recent journal ---
-Hint: You are currently not seeing messages from other users and the system.
-      Users in groups 'adm', 'systemd-journal' can see all messages.
-      Pass -q to turn off this notice.
--- No entries --
---- runner processes ---
-gha-vae+ 1238937 Mon Aug 17 15:13:00 2026       00:29 Sl   Runner.Worker   /var/lib/gha-vaelinya/actions-runner/bin/Runner.Worker spawnclient 152 158
-gha-hid+ 1558397 Wed Aug 12 18:07:44 2026  4-21:05:45 Ss   runsvc.sh       /bin/bash /var/lib/gha-hidden-country/actions-runner/runsvc.sh
-gha-hid+ 1558407 Wed Aug 12 18:07:45 2026  4-21:05:45 Sl   Runner.Listener /var/lib/gha-hidden-country/actions-runner/bin/Runner.Listener run --startuptype service
-gha-thr+ 1577815 Wed Aug 12 18:48:49 2026  4-20:24:41 Ss   runsvc.sh       /bin/bash /var/lib/gha-threadkeeper/actions-runner/runsvc.sh
-gha-thr+ 1577825 Wed Aug 12 18:48:49 2026  4-20:24:41 Sl   Runner.Listener /var/lib/gha-threadkeeper/actions-runner/bin/Runner.Listener run --startuptype service
-gha-twis 1577866 Wed Aug 12 18:48:54 2026  4-20:24:36 Ss   runsvc.sh       /bin/bash /var/lib/gha-twis/actions-runner/runsvc.sh
-gha-twis 1577876 Wed Aug 12 18:48:54 2026  4-20:24:36 Sl   Runner.Listener /var/lib/gha-twis/actions-runner/bin/Runner.Listener run --startuptype service
-gha-can+ 1594021 Wed Aug 12 19:29:14 2026  4-19:44:16 Ss   runsvc.sh       /bin/bash /var/lib/gha-canon-garden/actions-runner/runsvc.sh
-gha-can+ 1594035 Wed Aug 12 19:29:14 2026  4-19:44:16 Sl   Runner.Listener /var/lib/gha-canon-garden/actions-runner/bin/Runner.Listener run --startuptype service
-gha-vae+ 2487259 Fri Aug 14 10:15:12 2026  3-04:58:18 Ss   runsvc.sh       /bin/bash /var/lib/gha-vaelinya/actions-runner/runsvc.sh
-gha-vae+ 2487261 Fri Aug 14 10:15:12 2026  3-04:58:18 Sl   node            ./externals/node20/bin/node ./bin/RunnerService.js
-gha-vae+ 2487268 Fri Aug 14 10:15:12 2026  3-04:58:18 Sl   Runner.Listener /var/lib/gha-vaelinya/actions-runner/bin/Runner.Listener run --startuptype service
---- runner storage visibility ---
-ls: cannot access '/var/lib/gha-vaelinya/actions-runner': Permission denied
-ls: cannot access '/var/lib/gha-vaelinya/actions-runner/_diag': Permission denied
-drwxr-x--- 4 gha-vaelinya gha-vaelinya 4096 Aug 12 13:40 /var/lib/gha-vaelinya
+--- service cgroup ---
+CGroup /system.slice/actions.runner.armpitpete-vaelinya-canon.oracle-vaelinya-01.service:
+├─1239674 /var/lib/gha-vaelinya/actions-runner/bin/Runner.Worker spawnclient 15…
+├─2487259 /bin/bash /var/lib/gha-vaelinya/actions-runner/runsvc.sh
+├─2487261 ./externals/node20/bin/node ./bin/RunnerService.js
+└─2487268 /var/lib/gha-vaelinya/actions-runner/bin/Runner.Listener run --startu…
+--- full gha-vaelinya process view ---
+gha-hidden-country   1558397       1 Wed Aug 12 18:07:44 2026  4-21:07:22 Ss   runsvc.sh       /bin/bash /var/lib/gha-hidden-country/actions-runner/runsvc.sh
+gha-hidden-country   1558407 1558400 Wed Aug 12 18:07:45 2026  4-21:07:21 Sl        \_ Runner.      \_ /var/lib/gha-hidden-country/actions-runner/bin/Runner.Listener run --startuptype service
+gha-threadkeeper     1577815       1 Wed Aug 12 18:48:49 2026  4-20:26:17 Ss   runsvc.sh       /bin/bash /var/lib/gha-threadkeeper/actions-runner/runsvc.sh
+gha-threadkeeper     1577825 1577818 Wed Aug 12 18:48:49 2026  4-20:26:17 Sl        \_ Runner.      \_ /var/lib/gha-threadkeeper/actions-runner/bin/Runner.Listener run --startuptype service
+gha-twis             1577866       1 Wed Aug 12 18:48:54 2026  4-20:26:12 Ss   runsvc.sh       /bin/bash /var/lib/gha-twis/actions-runner/runsvc.sh
+gha-twis             1577876 1577869 Wed Aug 12 18:48:54 2026  4-20:26:12 Sl        \_ Runner.      \_ /var/lib/gha-twis/actions-runner/bin/Runner.Listener run --startuptype service
+gha-canon-garden     1594021       1 Wed Aug 12 19:29:14 2026  4-19:45:52 Ss   runsvc.sh       /bin/bash /var/lib/gha-canon-garden/actions-runner/runsvc.sh
+gha-canon-garden     1594035 1594026 Wed Aug 12 19:29:14 2026  4-19:45:52 Sl        \_ Runner.      \_ /var/lib/gha-canon-garden/actions-runner/bin/Runner.Listener run --startuptype service
+gha-vaelinya         2487259       1 Fri Aug 14 10:15:12 2026  3-04:59:54 Ss   runsvc.sh       /bin/bash /var/lib/gha-vaelinya/actions-runner/runsvc.sh
+gha-vaelinya         2487261 2487259 Fri Aug 14 10:15:12 2026  3-04:59:54 Sl    \_ node         \_ ./externals/node20/bin/node ./bin/RunnerService.js
+gha-vaelinya         2487268 2487261 Fri Aug 14 10:15:12 2026  3-04:59:54 Sl        \_ Runner.      \_ /var/lib/gha-vaelinya/actions-runner/bin/Runner.Listener run --startuptype service
+gha-vaelinya         1239674 2487268 Mon Aug 17 15:14:52 2026       00:14 Sl            \_ Run          \_ /var/lib/gha-vaelinya/actions-runner/bin/Runner.Worker spawnclient 157 160
 --- github connectivity ---
 HTTP/2 200 
-date: Mon, 17 Aug 2026 14:13:28 GMT
-content-type: text/html; charset=utf-8
-content-language: en-US
-vary: X-PJAX, X-PJAX-Container, Turbo-Visit, Turbo-Frame, X-Requested-With, X-GitHub-Client-Version, Accept-Language, Sec-Fetch-Site,Accept-Encoding, Accept, X-Requested-With
-etag: W/"06350831dfe9a84b76d048149be638c8"
-cache-control: max-age=0, private, must-revalidate
-strict-transport-security: max-age=31536000; includeSubdomains; preload
-HTTP/2 200 
-date: Mon, 17 Aug 2026 14:13:27 GMT
+date: Mon, 17 Aug 2026 14:14:59 GMT
 cache-control: public, max-age=60, s-maxage=60
 vary: Accept,Accept-Encoding, Accept, X-Requested-With
 x-github-api-version-selected: 2022-11-28
 access-control-expose-headers: ETag, Link, Location, Retry-After, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Used, X-RateLimit-Resource, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval, X-GitHub-Media-Type, X-GitHub-SSO, X-GitHub-Request-Id, Deprecation, Sunset, Warning
 access-control-allow-origin: *
 strict-transport-security: max-age=31536000; includeSubdomains; preload
---- network sockets ---
-ESTAB      0      5380            10.0.0.107:22           172.184.135.227:49176       
-ESTAB      0      0               10.0.0.107:39840        169.254.169.254:80          
-ESTAB      0      0      [::ffff:10.0.0.107]:37172 [::ffff:140.82.113.21]:443         
-ESTAB      0      0      [::ffff:10.0.0.107]:34366 [::ffff:20.85.130.105]:443         
-ESTAB      0      0      [::ffff:10.0.0.107]:40170 [::ffff:20.85.130.105]:443         
-ESTAB      0      0      [::ffff:10.0.0.107]:46016 [::ffff:20.85.130.105]:443         
-ESTAB      0      0      [::ffff:10.0.0.107]:47452 [::ffff:20.85.130.105]:443         
-ESTAB      0      0      [::ffff:10.0.0.107]:54066 [::ffff:20.85.130.105]:443         
-ESTAB      0      0      [::ffff:10.0.0.107]:54080 [::ffff:20.85.130.105]:443         
-ESTAB      0      0      [::ffff:10.0.0.107]:58956 [::ffff:20.85.130.105]:443         
-ESTAB      0      0      [::ffff:10.0.0.107]:52772 [::ffff:140.82.112.22]:443         
-ESTAB      0      0      [::ffff:10.0.0.107]:52784 [::ffff:140.82.112.22]:443         
 --- sudo noninteractive ---
 sudo: a password is required
 
