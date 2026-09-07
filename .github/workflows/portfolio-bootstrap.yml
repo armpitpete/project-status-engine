@@ -48,7 +48,7 @@ concurrency:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,7 +82,7 @@ jobs:
   audit:
     needs: validate
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'audit'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -104,7 +104,7 @@ jobs:
       github.event_name == 'push' ||
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.mode == 'apply')
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 45
     steps:
       - name: Mark portfolio bootstrap running
@@ -230,7 +230,7 @@ jobs:
   merge-approved:
     needs: validate
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'merge-approved'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
