@@ -1,29 +1,30 @@
 {
   "actions": {
-    "exception": 42,
-    "opened_pr": 5,
-    "unchanged": 3
+    "exception": 79,
+    "opened_pr": 1,
+    "unchanged": 8,
+    "updated_pr": 2
   },
   "exceptions": {
-    "ambiguous_project_type": 0,
+    "ambiguous_project_type": 3,
     "contradictory_evidence": 0,
     "inactive_repository_candidate": 0,
     "missing_authoritative_source": 0,
-    "missing_completion_contract": 0,
+    "missing_completion_contract": 1,
     "missing_readme_marker": 0,
-    "no_completion_evidence": 42
+    "no_completion_evidence": 75
   },
   "failures": {},
-  "inventory": 50,
+  "inventory": 90,
   "inventory_sources": {
-    "authenticated": 50,
-    "public": 19,
-    "union": 50
+    "authenticated": 91,
+    "public": 29,
+    "union": 91
   },
   "minimum_inventory": 49,
   "mode": "apply",
   "registry_schema_version": 1,
   "schema_version": 2,
-  "source_sha": "431e5831c6ad1f7711d188e10fc66558ff56824c",
+  "source_sha": "b895f5f91e9c33dcc4b95c75696b093a0883ccf9",
   "status": "complete"
 }
