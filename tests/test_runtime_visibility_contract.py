@@ -20,6 +20,34 @@ class RuntimeVisibilityContractTests(unittest.TestCase):
         subject.validate_runtime_visibility({"private": False})
         subject.validate_runtime_visibility({"private": True})
 
+    def test_private_identity_prefix_is_not_a_leak(self):
+        self.assertFalse(
+            subject.contains_repository_identity(
+                "Public repo: armpitpete/threadkeeper-core",
+                "armpitpete/threadkeeper",
+            )
+        )
+        self.assertFalse(
+            subject.contains_repository_identity(
+                "https://github.com/armpitpete/threadkeeper-core",
+                "https://github.com/armpitpete/threadkeeper",
+            )
+        )
+
+    def test_exact_private_identity_and_private_url_path_are_leaks(self):
+        self.assertTrue(
+            subject.contains_repository_identity(
+                "See armpitpete/threadkeeper.",
+                "armpitpete/threadkeeper",
+            )
+        )
+        self.assertTrue(
+            subject.contains_repository_identity(
+                "https://github.com/armpitpete/threadkeeper/issues/1",
+                "https://github.com/armpitpete/threadkeeper",
+            )
+        )
+
     def test_missing_or_non_boolean_flag_is_rejected(self):
         for value in (None, "true", 1, 0):
             with self.subTest(value=value):
