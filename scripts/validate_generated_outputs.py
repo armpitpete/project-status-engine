@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import sys
 from typing import Any
@@ -51,6 +52,21 @@ class ValidationError(RuntimeError):
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValidationError(message)
+
+
+def contains_repository_identity(text: str, value: str) -> bool:
+    """Return True only when a repository identity appears as a complete token.
+
+    Repository names may contain letters, digits, dot, underscore and hyphen.
+    A private repository such as ``owner/repo`` must therefore not match the
+    distinct public repository ``owner/repo-core`` merely because it is a
+    string prefix. Paths beneath the exact private identity still count as a
+    leak.
+    """
+    if not value:
+        return False
+    pattern = rf"(?<![A-Za-z0-9._-]){re.escape(value)}(?![A-Za-z0-9_-]|\\.[A-Za-z0-9_-])"
+    return re.search(pattern, text, flags=re.IGNORECASE) is not None
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -216,7 +232,10 @@ def validate_structural_redaction(
             continue
         for value in (record.get("full_name") or "", record.get("url") or ""):
             if value:
-                require(value not in public_text, "private identity appeared in public output")
+                require(
+                    not contains_repository_identity(public_text, value),
+                    "private identity appeared in public output",
+                )
 
 
 def validate_private_navigation() -> None:
