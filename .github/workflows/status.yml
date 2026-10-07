@@ -25,6 +25,7 @@ env:
 
 jobs:
   build:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -95,10 +96,87 @@ jobs:
           name: ${{ env.PAGES_ARTIFACT_NAME }}
           path: public
 
-  deploy:
-    needs: build
+
+  build-owned:
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Run deterministic tests
+        run: python -m unittest discover -s tests -p "test_*.py"
+
+      - name: Generate status views
+        env:
+          PROJECT_STATUS_TOKEN: ${{ secrets.PROJECT_STATUS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATUS_OWNER: armpitpete
+          STATUS_MAX_REPOS: "100"
+          STATUS_MAX_ITEMS: "8"
+          STATUS_PROJECT_LIMIT: "5"
+          STATUS_ACTIVITY_WINDOW_DAYS: "30"
+          STATUS_API_RETRIES: "2"
+          STATUS_PROGRESS_PATH: .project/progress.json
+          STATUS_OUT_DIR: public
+          PRIVATE_STATUS_OUT_DIR: private-build
+          INTERNAL_STATUS_OUT_DIR: internal-build
+        run: python scripts/generate_status.py
+
+      - name: Validate generated outputs and privacy boundaries
+        run: python scripts/validate_generated_outputs.py
+
+      - name: Prepare dedicated private deployment credential
+        if: github.event_name != 'pull_request' && vars.PRIVATE_STATUS_DEPLOY_ENABLED == 'true'
+        env:
+          PRIVATE_STATUS_DEPLOY_KEY: ${{ secrets.PRIVATE_STATUS_DEPLOY_KEY }}
+          PRIVATE_STATUS_KNOWN_HOSTS: ${{ secrets.PRIVATE_STATUS_KNOWN_HOSTS }}
+        run: |
+          test -n "$PRIVATE_STATUS_DEPLOY_KEY"
+          test -n "$PRIVATE_STATUS_KNOWN_HOSTS"
+          install -d -m 700 "${RUNNER_TEMP}/private-status-ssh"
+          printf '%s\n' "$PRIVATE_STATUS_DEPLOY_KEY" > "${RUNNER_TEMP}/private-status-ssh/id_ed25519"
+          printf '%s\n' "$PRIVATE_STATUS_KNOWN_HOSTS" > "${RUNNER_TEMP}/private-status-ssh/known_hosts"
+          chmod 600 "${RUNNER_TEMP}/private-status-ssh/id_ed25519" "${RUNNER_TEMP}/private-status-ssh/known_hosts"
+
+      - name: Deploy private owner dashboard to pinned Oracle target
+        if: github.event_name != 'pull_request' && vars.PRIVATE_STATUS_DEPLOY_ENABLED == 'true'
+        env:
+          PRIVATE_STATUS_DEPLOY_HOST: server.vaelinya.uk
+          PRIVATE_STATUS_DEPLOY_USER: vaelinya
+          PRIVATE_STATUS_DEPLOY_TARGET: /home/vaelinya/public_html/private/project-status-engine/
+          PRIVATE_STATUS_SOURCE_DIR: private-build
+          PRIVATE_STATUS_SSH_KEY_FILE: ${{ runner.temp }}/private-status-ssh/id_ed25519
+          PRIVATE_STATUS_KNOWN_HOSTS_FILE: ${{ runner.temp }}/private-status-ssh/known_hosts
+        run: bash scripts/deploy_private_status.sh
+
+      - name: Verify anonymous access remains blocked
+        if: github.event_name != 'pull_request' && vars.PRIVATE_STATUS_DEPLOY_ENABLED == 'true'
+        run: python scripts/verify_private_access.py https://command.vaelinya.uk/private/project-status-engine/
+
+      - name: Clean private deployment credential
+        if: always() && vars.PRIVATE_STATUS_DEPLOY_ENABLED == 'true'
+        run: rm -rf "$RUNNER_TEMP/private-status-ssh"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload public Pages artifact only
+        uses: actions/upload-pages-artifact@v4
+        with:
+          name: ${{ env.PAGES_ARTIFACT_NAME }}
+          path: public
+
+  deploy:
+    needs: build-owned
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
     timeout-minutes: 10
     environment:
       name: github-pages
