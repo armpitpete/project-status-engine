@@ -48,6 +48,7 @@ concurrency:
 
 jobs:
   validate:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -79,10 +80,44 @@ jobs:
           print("Verified identity-free portfolio bootstrap implementation.")
           PY
 
+
+  validate-owned:
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run deterministic tests
+        run: python -m unittest discover -s tests -p "test_*.py"
+
+      - name: Prove bootstrap policy contains no repository identity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          paths = [
+              Path("config/portfolio-authority-registry.json"),
+              Path("scripts/portfolio_bootstrap.py"),
+              *sorted(Path("scripts/portfolio_bootstrap_parts").glob("part*.inc")),
+              *sorted(Path("docs").glob("PORTFOLIO_*.md")),
+              Path(".github/workflows/portfolio-bootstrap.yml"),
+          ]
+          text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+          assert ("github.com/" + "armpitpete/") not in text
+          assert ("curious-world" + "-of-ellie-morcant") not in text
+          print("Verified identity-free portfolio bootstrap implementation.")
+          PY
+
   audit:
-    needs: validate
+    needs: validate-owned
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'audit'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -99,12 +134,12 @@ jobs:
         run: python scripts/portfolio_bootstrap.py
 
   bootstrap:
-    needs: validate
+    needs: validate-owned
     if: >-
       github.event_name == 'push' ||
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.mode == 'apply')
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
     timeout-minutes: 45
     steps:
       - name: Mark portfolio bootstrap running
@@ -228,9 +263,9 @@ jobs:
           PY
 
   merge-approved:
-    needs: validate
+    needs: validate-owned
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'merge-approved'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

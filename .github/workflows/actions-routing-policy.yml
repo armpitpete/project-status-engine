@@ -1,0 +1,38 @@
+name: Actions runner routing policy
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "scripts/check_actions_routing.py"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "scripts/check_actions_routing.py"
+
+permissions:
+  contents: read
+
+jobs:
+  policy-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - run: python scripts/check_actions_routing.py
+
+  policy-owned:
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - run: python scripts/check_actions_routing.py

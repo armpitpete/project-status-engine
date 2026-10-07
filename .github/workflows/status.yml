@@ -25,7 +25,25 @@ env:
 
 jobs:
   build:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Run deterministic tests
+        run: python -m unittest discover -s tests -p "test_*.py"
+
+
+  build-owned:
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -86,6 +104,10 @@ jobs:
         if: github.event_name != 'pull_request' && vars.PRIVATE_STATUS_DEPLOY_ENABLED == 'true'
         run: python scripts/verify_private_access.py https://command.vaelinya.uk/private/project-status-engine/
 
+      - name: Clean private deployment credential
+        if: always() && vars.PRIVATE_STATUS_DEPLOY_ENABLED == 'true'
+        run: rm -rf "$RUNNER_TEMP/private-status-ssh"
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
@@ -96,9 +118,9 @@ jobs:
           path: public
 
   deploy:
-    needs: build
+    needs: build-owned
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
     timeout-minutes: 10
     environment:
       name: github-pages

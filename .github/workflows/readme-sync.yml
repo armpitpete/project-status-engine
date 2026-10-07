@@ -47,6 +47,7 @@ concurrency:
 
 jobs:
   validate:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -83,12 +84,51 @@ jobs:
           print("Verified identity-free all-valid policy and test-only contract fixtures.")
           PY
 
+
+  validate-owned:
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Run deterministic tests
+        run: python -m unittest discover -s tests -p "test_*.py"
+
+      - name: Prove committed rollout configuration contains no repository identity
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          policy_path = Path("config/readme-sync-policy.json")
+          policy = json.loads(policy_path.read_text(encoding="utf-8"))
+          assert policy == {"schema_version": 1, "mode": "all-valid"}
+
+          fixture_path = Path("tests/fixtures/readme-sync-contract-shapes.json")
+          fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+          assert fixture["schema_version"] == 1
+          assert len(fixture["targets"]) == 3
+
+          text = policy_path.read_text(encoding="utf-8") + fixture_path.read_text(
+              encoding="utf-8"
+          )
+          assert "github.com" not in text
+          assert "armpitpete/" not in text
+          print("Verified identity-free all-valid policy and test-only contract fixtures.")
+          PY
+
   synchronise:
-    needs: validate
+    needs: validate-owned
     if: >-
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.apply)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, oracle-ci, project-status-engine]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
