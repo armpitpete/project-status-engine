@@ -6,7 +6,6 @@ ROOT = Path(__file__).resolve().parents[1]
 WF = ROOT / ".github" / "workflows"
 OWNED = "[self-hosted, Linux, ARM64, oracle-ci, project-status-engine]"
 HOSTED_EXCEPTIONS = {
-    ("status.yml", "build"): "ubuntu-latest",
     ("readme-sync.yml", "validate"): "ubuntu-latest",
     ("portfolio-bootstrap.yml", "validate"): "ubuntu-latest",
     ("actions-routing-policy.yml", "policy-pr"): "ubuntu-latest",
@@ -58,6 +57,10 @@ for path in sorted(WF.glob("*.y*ml")):
 
 for path_name, job_name in sorted(set(HOSTED_EXCEPTIONS) - seen_exceptions):
     errors.append(f"{path_name}:{job_name}: declared hosted exception not found")
+
+status_pr = extract_jobs(WF / "status.yml").get("build", [])
+if not any("github.event.pull_request.head.repo.full_name == github.repository" in x for x in status_pr):
+    errors.append("status.yml:build must reject fork pull requests on the self-hosted runner")
 
 if errors:
     print("\n".join(errors), file=sys.stderr)
