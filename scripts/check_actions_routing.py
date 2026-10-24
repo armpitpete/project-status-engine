@@ -6,9 +6,6 @@ ROOT = Path(__file__).resolve().parents[1]
 WF = ROOT / ".github" / "workflows"
 OWNED = "[self-hosted, Linux, ARM64, oracle-ci, project-status-engine]"
 HOSTED_EXCEPTIONS = {
-    ("readme-sync.yml", "validate"): "ubuntu-latest",
-    ("portfolio-bootstrap.yml", "validate"): "ubuntu-latest",
-    ("actions-routing-policy.yml", "policy-pr"): "ubuntu-latest",
 }
 
 def extract_jobs(path):
@@ -54,6 +51,10 @@ for path in sorted(WF.glob("*.y*ml")):
                 errors.append(f"{path.name}:{job_name}: hosted exception must be pull_request-only")
         elif value != OWNED:
             errors.append(f"{path.name}:{job_name}: expected owned runner {OWNED}, got {value}")
+
+        if value == OWNED and any("if: github.event_name == 'pull_request'" in x for x in block):
+            if not any("github.event.pull_request.head.repo.full_name == github.repository" in x for x in block):
+                errors.append(f"{path.name}:{job_name}: self-hosted PR job must reject untrusted forks")
 
 for path_name, job_name in sorted(set(HOSTED_EXCEPTIONS) - seen_exceptions):
     errors.append(f"{path_name}:{job_name}: declared hosted exception not found")
